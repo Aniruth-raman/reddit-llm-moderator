@@ -1,0 +1,17 @@
+rules:
+  - number: 1
+    title: "No spam or self-promotion"
+    explanation: "Posts should not be primarily for self-promotion or spamming links."
+    response: "Your submission has been removed for violating Rule 1: No spam or self-promotion."
+    notification_method: "public"  # Optional: "public" (default) or "modmail"
+  
+  - number: 2
+    title: "Be civil and respectful"
+    explanation: "Treat others with respect. Personal attacks, hate speech, and harassment are not tolerated."
+    response: "Your submission has been removed for violating Rule 2: Be civil and respectful."
+    notification_method: "modmail"  # Optional: use modmail for sensitive issues
+  
+  - number: 3
+    title: "No NSFW content"
+    explanation: "This subreddit is SFW. NSFW content is not allowed."
+    response: "Your post has been removed for containing NSFW content, which is not allowed in this community."
