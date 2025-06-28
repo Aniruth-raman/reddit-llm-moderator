@@ -9,6 +9,7 @@ reddit:
 # LLM Configuration
 llm:
   provider: "openai"  # Options: "openai", "anthropic", "gemini", "ollama"
+  confidence_threshold: 0.8  # Minimum confidence (0.0-1.0) required to take action
 
 # OpenAI Configuration
 openai:

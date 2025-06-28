@@ -4,22 +4,13 @@ Command-line interface for Reddit LLM Moderator.
 """
 
 import argparse
-import logging
 import sys
 
 # Import shared components
-from shared.llm_core import LLMProviderFactory
-from shared.utils import create_llm_prompt, load_config, load_rules, authenticate_reddit
-from shared.models import ModerationDecision
-from shared.moderation import ModerationService
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
+from shared.LLMProvider import LLMProviderFactory
+from shared.utils import create_llm_prompt, load_config, load_rules, authenticate_reddit, logger
+from shared.Moderation import ModerationDecision
+from shared.ModerationService import ModerationService
 
 
 def evaluate_item(item, rules, config):
@@ -37,11 +28,9 @@ def evaluate_item(item, rules, config):
     try:
         # Determine which provider to use (default to openai if not specified)
         provider_name = config.get("provider", "openai")
-        provider_config = config.get(provider_name, {"api_key": config.get("api_key")})
-        
         # Create provider
-        llm_provider = LLMProviderFactory.create_provider(provider_name, provider_config)
-        
+        llm_provider = LLMProviderFactory.create_provider(provider_name, config)
+        logger.debug(f"Using LLM provider: {llm_provider}")
         if llm_provider:
             # Create prompt and evaluate
             prompt = create_llm_prompt(item, rules)
@@ -49,13 +38,14 @@ def evaluate_item(item, rules, config):
             return ModerationDecision(decision_data)
         else:
             raise ValueError(f"Failed to create LLM provider: {provider_name}")
-                
+
     except Exception as e:
         logger.error(f"LLM evaluation failed: {e}")
         return ModerationDecision({"violates": False, "error": str(e)})
 
 
-def moderate_item(item, decision, rules, subreddit, dry_run=False, notification_method="public"):
+def moderate_item(item, decision, rules, subreddit, dry_run=False, notification_method="public",
+                  confidence_threshold=0.8):
     """
     Take moderation action on a Reddit item (submission or comment) based on LLM decision.
     
@@ -66,13 +56,14 @@ def moderate_item(item, decision, rules, subreddit, dry_run=False, notification_
         subreddit: The subreddit instance
         dry_run: If True, don't actually perform actions
         notification_method: How to notify users ("public" or "modmail")
+        confidence_threshold: Minimum confidence required to take action
         
     Returns:
         String describing the action taken
     """
     # Use the shared ModerationService
     moderation_service = ModerationService()
-    
+
     # Let the service handle the moderation
     result = moderation_service.moderate_item(
         item=item,
@@ -80,9 +71,10 @@ def moderate_item(item, decision, rules, subreddit, dry_run=False, notification_
         rules=rules,
         subreddit=subreddit,
         notification_method=notification_method,
-        dry_run=dry_run
+        dry_run=dry_run,
+        confidence_threshold=confidence_threshold
     )
-    
+
     # Return a descriptive string of the action taken
     if result.action_taken == "approved":
         return "Approved"
@@ -91,13 +83,16 @@ def moderate_item(item, decision, rules, subreddit, dry_run=False, notification_
             return f"Removed (Rule {result.rule_number})"
         else:
             return "Removed"
+    elif result.action_taken == "no_action":
+        return f"No action taken ({result.explanation})"
     else:
         return f"Not actioned ({result.explanation})"
 
 
 def main():
     """Main entry point for the CLI."""
-    parser = argparse.ArgumentParser(description="Reddit LLM Moderator")
+    logger.debug("Starting Reddit LLM Moderator CLI")
+    parser = argparse.ArgumentParser(description="Reddit LLM Moderator - Confidence-based AI moderation for Reddit")
     parser.add_argument(
         "--subreddit", "-s", required=True, help="Subreddit to moderate"
     )
@@ -120,21 +115,12 @@ def main():
         help="Type of modqueue items to process: 'all', 'submissions', or 'comments'",
     )
     parser.add_argument(
-        "--debug", action="store_true", help="Enable debug logging for troubleshooting"
-    )
-    parser.add_argument(
         "--notification",
         choices=["public", "modmail"],
-        default="public",
+        default="modmail",
         help="How to deliver removal reasons: 'public' (comments/replies) or 'modmail'",
     )
     args = parser.parse_args()
-    
-    # Set logging level based on debug flag
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        logger.debug("Debug logging enabled")
-    
     # Load configuration and rules
     config = load_config(args.config)
     rules = load_rules(args.rules)
@@ -152,56 +138,61 @@ def main():
     logger.info(f"Target subreddit: r/{args.subreddit}")
     logger.info(f"Notification method: {args.notification}")
 
+    # Get confidence threshold from config
+    confidence_threshold = config.get("llm", {}).get("confidence_threshold", 0.8)
+    logger.info(f"Confidence threshold: {confidence_threshold}")
+
     try:
         # Get subreddit instance
         subreddit = reddit.subreddit(args.subreddit)
 
         # Fetch modqueue items (up to 100)
-        modqueue_items = list(subreddit.mod.modqueue(limit=100))
+        modqueue_items = list(subreddit.mod.modqueue(limit=1))
 
         if not modqueue_items:
             logger.info("Modqueue is empty. No items to process.")
             return
 
         logger.info(f"Found {len(modqueue_items)} items in modqueue")
-        
+
         # Log item type filter if specified
         if args.type != "all":
             logger.info(f"Filtering for {args.type} only")
-            
+
         # Process each item in the modqueue
         for item in modqueue_items:
             # Determine if it's a submission or comment
             is_submission = hasattr(item, "title")
             item_type = "submission" if is_submission else "comment"
-            
+
             # Skip items based on the type filter
             if args.type == "submissions" and not is_submission:
                 continue
             if args.type == "comments" and is_submission:
                 continue
-                
+
             # Get a readable identifier for the item
             item_identifier = item.title if is_submission else item.body[:50] + "..."
-            
+
             logger.info(f"Processing {item_type}: '{item_identifier}'")
-            
+
             # Prepare LLM config by combining provider info with specific provider settings
             llm_config = config.get("llm", {}).copy()
             provider_name = llm_config.get("provider", "openai")
             provider_config = config.get(provider_name, {})
             llm_config.update(provider_config)
-              # Evaluate item using LLM
+            # Evaluate item using LLM
             decision = evaluate_item(item, rules, llm_config)
-            
+
             # Take moderation action
             result = moderate_item(
-                item, 
-                decision, 
+                item,
+                decision,
                 rules,
                 subreddit,  # Pass the subreddit instance
                 dry_run=args.dry_run,
-                notification_method=args.notification
+                notification_method=args.notification,
+                confidence_threshold=confidence_threshold
             )
 
     except KeyboardInterrupt:

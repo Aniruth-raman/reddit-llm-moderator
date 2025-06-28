@@ -8,8 +8,12 @@ import os
 import sys
 import yaml
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
-
 
 def load_config(config_path):
     """
@@ -25,10 +29,10 @@ def load_config(config_path):
         if not os.path.exists(config_path):
             logger.error(f"Config file not found: {config_path}")
             return {}
-            
+
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
-        
+
         return config
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
@@ -49,19 +53,19 @@ def load_rules(rules_path):
         if not os.path.exists(rules_path):
             logger.error(f"Rules file not found: {rules_path}")
             return []
-            
+
         with open(rules_path, "r", encoding="utf-8") as f:
             rules_data = yaml.safe_load(f)
-        
+
         if not rules_data or "rules" not in rules_data:
             logger.error("Invalid rules file format")
             return []
-            
+
         return rules_data["rules"]
     except Exception as e:
         logger.error(f"Failed to load rules: {e}")
         return []
-        
+
 
 def authenticate_reddit(reddit_config):
     """
@@ -75,7 +79,7 @@ def authenticate_reddit(reddit_config):
     """
     try:
         import praw
-        
+
         reddit = praw.Reddit(
             client_id=reddit_config.get("client_id"),
             client_secret=reddit_config.get("client_secret"),
@@ -83,15 +87,16 @@ def authenticate_reddit(reddit_config):
             password=reddit_config.get("password"),
             user_agent=reddit_config.get("user_agent")
         )
-        
+
         # Verify credentials by checking username
         username = reddit.user.me().name
         logger.info(f"Authenticated as: {username}")
-        
+
         return reddit
     except Exception as e:
         logger.error(f"Reddit authentication failed: {e}")
         sys.exit(1)
+
 
 # Utility functions for prompt creation
 def create_llm_prompt(item, rules):
@@ -136,15 +141,18 @@ SUBREDDIT RULES:
 If the {content_type} violates any rule, respond with:
 {{
   "violates": true,
-  "rule_number": [rule number],
-  "explanation": "[your explanation why it violates this rule]"
+  "rule_number": rule number,
+  "explanation": "[your explanation why it violates this rule]",
+  "confidence": [confidence score from 0.0 to 1.0]
 }}
 
 If the {content_type} does not violate any rule, respond with:
 {{
-  "violates": false
+  "violates": false,
+  "confidence": [confidence score from 0.0 to 1.0]
 }}
 
+Always include a confidence score from 0.0 (not confident) to 1.0 (very confident) indicating how certain you are about your decision.
 Respond ONLY with the JSON object, nothing else.
 """
     return prompt

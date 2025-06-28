@@ -35,6 +35,21 @@ This guide provides instructions for setting up and running the Reddit LLM Moder
    # Edit rules.yaml to match your subreddit's rules
    ```
 
+## Confidence Threshold Configuration
+
+The moderator uses confidence scores to make more reliable decisions:
+
+- Set `llm.confidence_threshold` in `config.yaml` (default: 0.8)
+- Only actions with confidence ≥ threshold will be taken
+- Low confidence results in "no action" instead of potentially incorrect moderation
+- This prevents false positives and makes the system more conservative
+
+Example in `config.yaml`:
+```yaml
+llm:
+  confidence_threshold: 0.8  # Only act when AI is 80%+ confident
+```
+
 ## Using the CLI Mode
 
 The CLI mode allows you to process your modqueue items directly from the command line.

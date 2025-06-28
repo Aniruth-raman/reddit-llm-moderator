@@ -5,7 +5,6 @@ MCP server implementation for Reddit LLM Moderator.
 
 import asyncio
 import json
-import logging
 import os
 from typing import Dict, Any, List, Optional
 
@@ -15,18 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # Import shared components
-from shared.llm_core import LLMProviderFactory
-from shared.utils import create_llm_prompt, load_config, load_rules, authenticate_reddit
-from shared.models import ModerationDecision, ModerationResult, ModerationRule
-from shared.moderation import ModerationService
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
+from shared.LLMProvider import LLMProviderFactory
+from shared.utils import create_llm_prompt, load_config, load_rules, authenticate_reddit, logger
+from shared.Moderation import ModerationDecision, ModerationResult, ModerationRule
+from shared.ModerationService import ModerationService
 
 # Create FastAPI application
 app = FastAPI(
@@ -44,10 +35,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Global application state
 class AppState:
     """Application state class."""
-    
+
     def __init__(self):
         """Initialize application state."""
         self.config = None
@@ -55,21 +47,22 @@ class AppState:
         self.reddit = None
         self.subreddits = {}
         self.moderation_service = ModerationService()
-        
+
+
 app_state = AppState()
 
 
 # Pydantic models for API
 class ConfigRequest(BaseModel):
     """Request model for configuration."""
-    
+
     config_path: str = Field(default="config.yaml", description="Path to configuration file")
     rules_path: str = Field(default="rules.yaml", description="Path to rules file")
 
 
 class ModerateRequest(BaseModel):
     """Request model for moderation."""
-    
+
     subreddit: str = Field(..., description="Subreddit name")
     item_id: str = Field(..., description="Reddit item ID (submission or comment)")
     dry_run: bool = Field(default=True, description="If True, don't take any actions")
@@ -78,7 +71,7 @@ class ModerateRequest(BaseModel):
 
 class ModQueueRequest(BaseModel):
     """Request model for fetching modqueue."""
-    
+
     subreddit: str = Field(..., description="Subreddit name")
     limit: int = Field(default=100, description="Maximum number of items to fetch")
     item_type: str = Field(default="all", description="Type of items (all, submissions, comments)")
@@ -105,32 +98,32 @@ async def initialize(request: ConfigRequest):
         config = load_config(request.config_path)
         if not config:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Failed to load config from: {request.config_path}"
             )
-            
+
         # Load rules
         rules = load_rules(request.rules_path)
         if not rules:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Failed to load rules from: {request.rules_path}"
             )
-            
+
         # Authenticate with Reddit
         reddit = authenticate_reddit(config["reddit"])
-        
+
         # Update application state
         app_state.config = config
         app_state.rules = rules  # Keep as raw dicts for compatibility
         app_state.reddit = reddit
-        
+
         # Log initialization details
         logger.info(f"Initialized with {len(rules)} rules")
         logger.info(f"Using LLM provider: {config.get('llm', {}).get('provider', 'openai')}")
-        
+
         return {"status": "success", "message": "Application initialized"}
-    
+
     except Exception as e:
         logger.error(f"Initialization error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -138,8 +131,8 @@ async def initialize(request: ConfigRequest):
 
 @app.get("/modqueue")
 async def get_modqueue(
-    request: ModQueueRequest,
-    app_state: AppState = Depends(get_app_state)
+        request: ModQueueRequest,
+        app_state: AppState = Depends(get_app_state)
 ):
     """
     Get items from a subreddit's modqueue.
@@ -148,27 +141,27 @@ async def get_modqueue(
         # Get or create subreddit instance
         if request.subreddit not in app_state.subreddits:
             app_state.subreddits[request.subreddit] = app_state.reddit.subreddit(request.subreddit)
-            
+
         subreddit = app_state.subreddits[request.subreddit]
-        
+
         # Fetch modqueue items
         modqueue_items = list(subreddit.mod.modqueue(limit=request.limit))
         logger.info(f"Found {len(modqueue_items)} items in r/{request.subreddit} modqueue")
-        
+
         # Filter by type if needed
         if request.item_type != "all":
             is_submission_filter = (request.item_type == "submissions")
             modqueue_items = [
-                item for item in modqueue_items 
+                item for item in modqueue_items
                 if (hasattr(item, "title") == is_submission_filter)
             ]
             logger.info(f"Filtered to {len(modqueue_items)} {request.item_type}")
-            
+
         # Convert items to dictionaries with better structure
         items = []
         for item in modqueue_items:
             is_submission = hasattr(item, "title")
-            
+
             # Common properties
             item_dict = {
                 "id": item.id,
@@ -178,7 +171,7 @@ async def get_modqueue(
                 "permalink": item.permalink if hasattr(item, "permalink") else "",
                 "subreddit": item.subreddit.display_name
             }
-            
+
             # Type-specific properties
             if is_submission:
                 item_dict.update({
@@ -196,11 +189,11 @@ async def get_modqueue(
                     "parent_id": item.parent_id if hasattr(item, "parent_id") else "",
                     "score": item.score if hasattr(item, "score") else 0
                 })
-                
+
             items.append(item_dict)
-            
+
         return {"status": "success", "items": items, "count": len(items)}
-    
+
     except Exception as e:
         logger.error(f"Modqueue error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -208,8 +201,8 @@ async def get_modqueue(
 
 @app.post("/moderate")
 async def moderate_item(
-    request: ModerateRequest,
-    app_state: AppState = Depends(get_app_state)
+        request: ModerateRequest,
+        app_state: AppState = Depends(get_app_state)
 ):
     """
     Moderate a specific Reddit item.
@@ -218,12 +211,12 @@ async def moderate_item(
         # Get or create subreddit instance
         if request.subreddit not in app_state.subreddits:
             app_state.subreddits[request.subreddit] = app_state.reddit.subreddit(request.subreddit)
-            
+
         subreddit = app_state.subreddits[request.subreddit]
-        
+
         # Fetch the item (could be submission or comment)
         item = None
-        
+
         # First try as submission
         try:
             item = app_state.reddit.submission(id=request.item_id)
@@ -233,47 +226,52 @@ async def moderate_item(
                 item = app_state.reddit.comment(id=request.item_id)
             except Exception:
                 pass
-                
+
         if not item:
             raise HTTPException(
                 status_code=404,
                 detail=f"Item not found: {request.item_id}"
             )
-            
+
         # Get appropriate LLM config
         llm_config = app_state.config.get("llm", {}).copy()
         provider_name = llm_config.get("provider", "openai")
         provider_config = app_state.config.get(provider_name, {})
         llm_config.update(provider_config)
-        
+
         # Create LLM provider
         llm_provider = LLMProviderFactory.create_provider(provider_name, provider_config)
-        
+
         if not llm_provider:
             raise ValueError(f"Failed to create LLM provider: {provider_name}")
-            
+
         # Create prompt and evaluate
         prompt = create_llm_prompt(item, app_state.rules)
         decision_data = llm_provider.evaluate_text(prompt)
         decision = ModerationDecision(decision_data)
-          # Use the moderation service to handle the decision
+
+        # Get confidence threshold from config
+        confidence_threshold = app_state.config.get("llm", {}).get("confidence_threshold", 0.8)
+
+        # Use the moderation service to handle the decision
         result = app_state.moderation_service.moderate_item(
             item=item,
             decision=decision,
             rules=app_state.rules,
             subreddit=subreddit,
             notification_method=request.notification_method,
-            dry_run=request.dry_run
+            dry_run=request.dry_run,
+            confidence_threshold=confidence_threshold
         )
-        
+
         # Return the result
         return {
-            "status": "success", 
+            "status": "success",
             "result": result.to_dict(),
             "decision": decision.to_dict(),
             "dry_run": request.dry_run
         }
-            
+
     except HTTPException:
         raise
     except Exception as e:
