@@ -7,7 +7,7 @@ import argparse
 import sys
 
 # Import shared components
-from shared.LLMProvider import create_gemini_provider
+from shared.LLMProvider import create_llm_provider
 from shared.utils import create_llm_prompt, load_config, load_rules, authenticate_reddit, logger
 from shared.Moderation import ModerationDecision
 from shared.ModerationService import ModerationService
@@ -15,24 +15,24 @@ from shared.ModerationService import ModerationService
 
 def evaluate_item(item, rules, config):
     """
-    Evaluate a Reddit item (submission or comment) against rules using Google Gemini.
+    Evaluate a Reddit item (submission or comment) against rules using LLM.
     
     Args:
         item: Reddit item (submission or comment)
         rules: List of rule dictionaries
-        config: Gemini configuration dictionary
+        config: LLM configuration dictionary
         
     Returns:
         ModerationDecision containing the evaluation result
     """
     try:
-        # Create Gemini provider
-        gemini_provider = create_gemini_provider(config)
-        logger.debug(f"Using LLM provider: {gemini_provider}")
+        # Create LLM provider (supports multiple providers)
+        llm_provider = create_llm_provider(config)
+        logger.debug(f"Using LLM provider: {llm_provider}")
         
         # Create prompt and evaluate
         prompt = create_llm_prompt(item, rules)
-        decision_data = gemini_provider.evaluate_text(prompt)
+        decision_data = llm_provider.evaluate_text(prompt)
         return ModerationDecision(decision_data)
 
     except Exception as e:
@@ -172,14 +172,14 @@ def main():
 
             logger.info(f"Processing {item_type}: '{item_identifier}'")
 
-            # Prepare Gemini config from the configuration file
-            gemini_config = config.get("gemini", {})
-            if not gemini_config:
-                logger.error("No Gemini configuration found. Please configure Gemini in your config file.")
+            # Prepare LLM config from the configuration file
+            llm_config = config.get("gemini", {})
+            if not llm_config:
+                logger.error("No LLM configuration found. Please configure an LLM provider in your config file.")
                 sys.exit(1)
                 
-            # Evaluate item using Gemini
-            decision = evaluate_item(item, rules, gemini_config)
+            # Evaluate item using LLM
+            decision = evaluate_item(item, rules, llm_config)
 
             # Take moderation action
             result = moderate_item(

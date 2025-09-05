@@ -10,7 +10,14 @@ reddit:
 llm:
   confidence_threshold: 0.8  # Minimum confidence (0.0-1.0) required to take action
 
-# Google Gemini Configuration
+# Google Gemini Configuration (Current default provider)
+# You can add provider: "gemini" explicitly for future extensibility
 gemini:
   api_key: YOUR_GEMINI_API_KEY
   model: "gemini-1.5-pro"  # Optional
+
+# Example for future extensibility (not implemented yet):
+# llm_provider:
+#   provider: "gemini"  # or "openai", "anthropic", etc.
+#   api_key: YOUR_API_KEY
+#   model: "gemini-1.5-pro"
