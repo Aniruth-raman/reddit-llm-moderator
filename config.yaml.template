@@ -1,23 +1,21 @@
-# Reddit API credentials
+# Reddit API Configuration
 reddit:
-  client_id: YOUR_CLIENT_ID
-  client_secret: YOUR_CLIENT_SECRET
-  username: YOUR_USERNAME
-  password: YOUR_PASSWORD
-  user_agent: "python:reddit-llm-moderator:v1.0 (by /u/YOUR_USERNAME)"
+  client_id: "YOUR_CLIENT_ID"
+  client_secret: "YOUR_CLIENT_SECRET" 
+  username: "YOUR_USERNAME"
+  password: "YOUR_PASSWORD"
+  user_agent: "RedditModerator/1.0 by YourUsername"
+  subreddit: "YourSubreddit"
 
-# LLM Configuration
-llm:
-  confidence_threshold: 0.8  # Minimum confidence (0.0-1.0) required to take action
-
-# Google Gemini Configuration (Current default provider)
-# You can add provider: "gemini" explicitly for future extensibility
+# Gemini Configuration  
 gemini:
-  api_key: YOUR_GEMINI_API_KEY
-  model: "gemini-1.5-pro"  # Optional
+  api_key: "YOUR_GEMINI_API_KEY"
+  model: "gemini-1.5-pro"
 
-# Example for future extensibility (not implemented yet):
+# Moderation thresholds
+approve_threshold: 80
+remove_threshold: 70
+
+# Extensible LLM provider config (optional - defaults to Gemini)
 # llm_provider:
-#   provider: "gemini"  # or "openai", "anthropic", etc.
-#   api_key: YOUR_API_KEY
-#   model: "gemini-1.5-pro"
+#   provider: "gemini"  # or "openai", "anthropic"
