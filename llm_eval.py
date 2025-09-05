@@ -1,8 +1,12 @@
 """LLM evaluation with extensible provider support using SOLID principles."""
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 import google.generativeai as genai
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class LLMProvider(ABC):
@@ -40,10 +44,16 @@ class GeminiProvider(LLMProvider):
     def evaluate(self, item, rules):
         """Evaluate Reddit item against rules using proper prompt engineering."""
         prompt = self._create_llm_prompt(item, rules)
+        logger.debug(f"Generated prompt: {prompt[:200]}...")
+        
         try:
             response = self._generate_content(prompt)
-            return self._parse_response(response)
+            logger.debug(f"Raw LLM response: {response}")
+            result = self._parse_response(response)
+            logger.info(f"LLM evaluation result: {result}")
+            return result
         except Exception as e:
+            logger.error(f"Error during LLM evaluation: {str(e)}")
             return {"violates": False, "confidence": 0, "error": str(e)}
     
     def _generate_content(self, prompt):
@@ -98,17 +108,23 @@ If the {content_type} does not violate any rule, respond with:
         """Parse JSON response from LLM."""
         try:
             result = json.loads(response_text)
-            print(result)
+            logger.debug(f"Successfully parsed JSON: {result}")
             # Convert confidence to 0-100 scale if needed
             if "confidence" in result and result["confidence"] <= 1.0:
                 result["confidence"] = int(result["confidence"] * 100)
             return result
         except json.JSONDecodeError:
+            logger.debug("Initial JSON parsing failed, trying regex fallback")
             json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
+                logger.debug(f"Regex fallback successful: {result}")
+                # Convert confidence to 0-100 scale if needed (apply same logic as above)
+                if "confidence" in result and result["confidence"] <= 1.0:
+                    result["confidence"] = int(result["confidence"] * 100)
                 return result
             else:
+                logger.error(f"Could not parse JSON from response: {response_text[:100]}...")
                 raise ValueError(
                     f"Could not parse JSON from response: {response_text[:100]}..."
                 )
@@ -120,17 +136,11 @@ class LLMProviderFactory:
     @staticmethod
     def create_provider(config):
         """Create LLM provider based on configuration following Dependency Inversion Principle."""
-        # Support both old and new config formats for backward compatibility
-        if 'gemini' in config:
-            # Legacy format
-            provider_type = 'gemini'
-            provider_config = config['gemini']
-        elif 'llm_provider' in config:
-            # New extensible format
-            provider_type = config['llm_provider']['provider']
-            provider_config = config['llm_provider']
-        else:
-            raise ValueError("No LLM provider configuration found")
+        if 'llm_provider' not in config:
+            raise ValueError("No 'llm_provider' configuration found. Please use the new configuration format.")
+        
+        provider_type = config['llm_provider']['provider']
+        provider_config = config['llm_provider']
         
         if provider_type == 'gemini':
             return GeminiProvider(provider_config)

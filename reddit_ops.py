@@ -1,7 +1,11 @@
 """Reddit operations using PRAW - handles fetching, approving, removing posts/comments.
 Follows Single Responsibility Principle with clear separation of concerns."""
+import logging
 import praw
 from abc import ABC, abstractmethod
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class RedditOperations(ABC):
@@ -31,15 +35,20 @@ class PrawRedditOperations(RedditOperations):
     
     def fetch_modqueue_items(self, subreddit_name, limit=10):
         """Fetch items from moderation queue."""
+        logger.debug(f"Fetching modqueue items from r/{subreddit_name} (limit={limit})")
         subreddit = self.reddit.subreddit(subreddit_name)
-        return list(subreddit.mod.modqueue(limit=limit))
+        items = list(subreddit.mod.modqueue(limit=limit))
+        logger.debug(f"Found {len(items)} items in modqueue")
+        return items
     
     def approve_item(self, item):
         """Approve a Reddit submission or comment."""
+        logger.debug(f"Approving item: {getattr(item, 'id', 'unknown')}")
         item.mod.approve()
     
     def remove_item(self, item, reason="Rule violation"):
         """Remove a Reddit submission or comment."""
+        logger.debug(f"Removing item: {getattr(item, 'id', 'unknown')} with reason: {reason}")
         item.mod.remove(reason=reason)
 
 
@@ -70,13 +79,18 @@ def get_reddit_operations(config):
 
 def fetch_modqueue_items(reddit, subreddit_name, limit=10):
     """Fetch items from moderation queue."""
+    logger.debug(f"Fetching modqueue items from r/{subreddit_name} (limit={limit})")
     subreddit = reddit.subreddit(subreddit_name)
-    return list(subreddit.mod.modqueue(limit=limit))
+    items = list(subreddit.mod.modqueue(limit=limit))
+    logger.debug(f"Found {len(items)} items in modqueue")
+    return items
 
 def approve_item(item):
     """Approve a Reddit submission or comment."""
+    logger.debug(f"Approving item: {getattr(item, 'id', 'unknown')}")
     item.mod.approve()
 
 def remove_item(item, reason="Rule violation"):
     """Remove a Reddit submission or comment."""
+    logger.debug(f"Removing item: {getattr(item, 'id', 'unknown')} with reason: {reason}")
     item.mod.remove(reason=reason)
