@@ -7,15 +7,21 @@ reddit:
   user_agent: "RedditModerator/1.0 by YourUsername"
   subreddit: "YourSubreddit"
 
-# Gemini Configuration  
-gemini:
-  api_key: "YOUR_GEMINI_API_KEY"
-  model: "gemini-1.5-pro"
-
 # Moderation thresholds
 approve_threshold: 80
 remove_threshold: 70
 
-# Extensible LLM provider config (optional - defaults to Gemini)
+# --- LLM Provider Configuration ---
+# Option 1: Legacy Gemini-only configuration (backward compatible)
+gemini:
+  api_key: "YOUR_GEMINI_API_KEY"
+  model: "gemini-1.5-pro"
+
+# Option 2: Extensible provider configuration (recommended for new deployments)
 # llm_provider:
-#   provider: "gemini"  # or "openai", "anthropic"
+#   provider: "gemini"  # or "openai", "anthropic", etc.
+#   api_key: "YOUR_API_KEY"
+#   model: "gemini-1.5-pro"  # provider-specific model name
+
+# Note: You can use either format above. The new extensible format
+# makes it easier to add support for other LLM providers in the future.

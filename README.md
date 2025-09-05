@@ -1,47 +1,43 @@
 # Reddit LLM Moderator
 
-A clean, focused Python CLI tool that leverages Google Gemini AI to help moderate Reddit content based on subreddit rules.
+A clean, minimal Python tool that uses LLM evaluation to help moderate Reddit content based on subreddit rules.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 ## Features
 
-- **Clean, focused architecture** - Only Google Gemini LLM support for simplicity
-- **Command-line interface** - Easy to use CLI for Reddit moderation
-- **Reddit integration** - Authentication with Reddit using script credentials
-- **Rule-based moderation** - Load subreddit rules from a YAML file
-- **Comprehensive content analysis** - Support for moderating both submissions and comments
-- **Confidence-based decisions** - Only take action when AI confidence meets threshold
-- **Flexible notification options**:
-    - Public comments for transparency
-    - Private modmail for sensitive issues
-- **Smart filtering** - Process all items, submissions only, or comments only
-- **Safe testing** - Dry run mode to simulate actions without taking them
-- **Robust error handling** - Graceful handling of API failures and edge cases
+- **Minimal architecture** - Just 3 files with clean separation of concerns
+- **Extensible LLM support** - Currently supports Google Gemini with easy extensibility for other providers
+- **SOLID principles** - Follows clean code principles and design patterns
+- **Reddit integration** - Authentication with Reddit using PRAW
+- **Rule-based moderation** - Load subreddit rules from YAML configuration
+- **Structured LLM evaluation** - JSON-based responses with confidence scoring
+- **Threshold-based actions** - Configurable confidence thresholds for approve/remove decisions
+- **Robust JSON parsing** - Advanced fallback parsing for LLM responses
 
-## Repository Structure
+## Architecture
+
+The tool follows clean architecture principles with perfect separation of concerns:
 
 ```
 reddit-llm-moderator/
-├── main.py                    # Main entry point for CLI
-├── requirements.txt           # Project dependencies (minimal)
-├── config.yaml.template      # Template for configuration file
-├── rules.yaml.template       # Template for rules configuration
-├── cli/                      # Command-line interface implementation
-│   └── moderator.py         # CLI-specific moderation logic
-├── shared/                   # Shared code and utilities
-│   ├── LLMProvider.py       # Google Gemini LLM provider implementation
-│   ├── Moderation.py        # Core moderation data models
-│   ├── ModerationService.py # Moderation service implementation
-│   ├── NotificationStrategy.py # Notification strategies (public/modmail)
-│   ├── RuleMatcher.py       # Rule matching logic with type conversion
-│   └── utils.py             # Utility functions and logging
-├── examples/                 # Example implementations and demos
-│   └── demo.py              # Demo script
-└── tests/                    # Test suite
-    └── test_reddit_mod.py   # Unit tests
+├── main.py              # Main orchestration and application entry point (85 lines)
+├── llm_eval.py         # LLM evaluation with extensible provider support (145 lines)  
+├── reddit_ops.py       # Reddit operations using PRAW (81 lines)
+├── requirements.txt    # Minimal dependencies (3 packages)
+├── config.yaml.template # Configuration template with extensible options
+└── rules.yaml.template # Rules configuration template
 ```
+
+**Total: 311 lines of clean, maintainable code**
+
+### Key Design Patterns
+
+- **Factory Pattern**: `LLMProviderFactory` for creating LLM providers
+- **Strategy Pattern**: `LLMProvider` abstract base class for different providers  
+- **Dependency Injection**: Clear separation of concerns with dependency injection
+- **Single Responsibility**: Each class/module has one clear purpose
 
 ## Setup
 
