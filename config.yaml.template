@@ -8,25 +8,9 @@ reddit:
 
 # LLM Configuration
 llm:
-  provider: "openai"  # Options: "openai", "anthropic", "gemini", "ollama"
   confidence_threshold: 0.8  # Minimum confidence (0.0-1.0) required to take action
-
-# OpenAI Configuration
-openai:
-  api_key: YOUR_OPENAI_API_KEY
-  model: "gpt-4-turbo"  # Optional
-
-# Anthropic Configuration
-anthropic:
-  api_key: YOUR_ANTHROPIC_API_KEY
-  model: "claude-3-opus-20240229"  # Optional
 
 # Google Gemini Configuration
 gemini:
   api_key: YOUR_GEMINI_API_KEY
   model: "gemini-1.5-pro"  # Optional
-
-# Ollama Configuration (local LLM)
-ollama:
-  model: "llama3"  # Required, specify the model you've pulled to Ollama
-  host: "http://localhost:11434"  # Optional, defaults to http://localhost:11434

@@ -7,7 +7,7 @@ import argparse
 import sys
 
 # Import shared components
-from shared.LLMProvider import LLMProviderFactory
+from shared.LLMProvider import create_gemini_provider
 from shared.utils import create_llm_prompt, load_config, load_rules, authenticate_reddit, logger
 from shared.Moderation import ModerationDecision
 from shared.ModerationService import ModerationService
@@ -15,29 +15,25 @@ from shared.ModerationService import ModerationService
 
 def evaluate_item(item, rules, config):
     """
-    Evaluate a Reddit item (submission or comment) against rules using the configured LLM provider.
+    Evaluate a Reddit item (submission or comment) against rules using Google Gemini.
     
     Args:
         item: Reddit item (submission or comment)
         rules: List of rule dictionaries
-        config: LLM configuration dictionary
+        config: Gemini configuration dictionary
         
     Returns:
         ModerationDecision containing the evaluation result
     """
     try:
-        # Determine which provider to use (default to openai if not specified)
-        provider_name = config.get("provider", "openai")
-        # Create provider
-        llm_provider = LLMProviderFactory.create_provider(provider_name, config)
-        logger.debug(f"Using LLM provider: {llm_provider}")
-        if llm_provider:
-            # Create prompt and evaluate
-            prompt = create_llm_prompt(item, rules)
-            decision_data = llm_provider.evaluate_text(prompt)
-            return ModerationDecision(decision_data)
-        else:
-            raise ValueError(f"Failed to create LLM provider: {provider_name}")
+        # Create Gemini provider
+        gemini_provider = create_gemini_provider(config)
+        logger.debug(f"Using LLM provider: {gemini_provider}")
+        
+        # Create prompt and evaluate
+        prompt = create_llm_prompt(item, rules)
+        decision_data = gemini_provider.evaluate_text(prompt)
+        return ModerationDecision(decision_data)
 
     except Exception as e:
         logger.error(f"LLM evaluation failed: {e}")
@@ -176,13 +172,14 @@ def main():
 
             logger.info(f"Processing {item_type}: '{item_identifier}'")
 
-            # Prepare LLM config by combining provider info with specific provider settings
-            llm_config = config.get("llm", {}).copy()
-            provider_name = llm_config.get("provider", "openai")
-            provider_config = config.get(provider_name, {})
-            llm_config.update(provider_config)
-            # Evaluate item using LLM
-            decision = evaluate_item(item, rules, llm_config)
+            # Prepare Gemini config from the configuration file
+            gemini_config = config.get("gemini", {})
+            if not gemini_config:
+                logger.error("No Gemini configuration found. Please configure Gemini in your config file.")
+                sys.exit(1)
+                
+            # Evaluate item using Gemini
+            decision = evaluate_item(item, rules, gemini_config)
 
             # Take moderation action
             result = moderate_item(

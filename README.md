@@ -1,57 +1,44 @@
 # Reddit LLM Moderator
 
-A Python tool that leverages AI language models to help moderate Reddit content based on subreddit rules. This project
-supports both a command-line interface (CLI) and an API server following the Model Context Protocol (MCP) design
-pattern.
+A clean, focused Python CLI tool that leverages Google Gemini AI to help moderate Reddit content based on subreddit rules.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 ## Features
 
-- Authentication with Reddit using script credentials
-- Loading subreddit rules from a YAML file
-- Fetching modqueue items from a specified subreddit
-- Support for moderating both submissions and comments
-- LLM analysis of content against subreddit rules
-- Support for multiple LLM providers:
-    - OpenAI (GPT-4, etc.)
-    - Anthropic (Claude)
-    - Google Gemini
-    - Ollama (local deployment)
-- Flexible notification options:
+- **Clean, focused architecture** - Only Google Gemini LLM support for simplicity
+- **Command-line interface** - Easy to use CLI for Reddit moderation
+- **Reddit integration** - Authentication with Reddit using script credentials
+- **Rule-based moderation** - Load subreddit rules from a YAML file
+- **Comprehensive content analysis** - Support for moderating both submissions and comments
+- **Confidence-based decisions** - Only take action when AI confidence meets threshold
+- **Flexible notification options**:
     - Public comments for transparency
     - Private modmail for sensitive issues
-- **Confidence-based moderation**: Only take action when AI confidence meets threshold
-- Automatic moderation actions (approve/remove) based on LLM decisions
-- Item type filtering (submissions, comments, or both)
-- Robust rule matching with type-conversion fallbacks
-- Debug mode for troubleshooting
-- Optional dry run mode to simulate actions without taking them
-- Available as both CLI tool and MCP server
+- **Smart filtering** - Process all items, submissions only, or comments only
+- **Safe testing** - Dry run mode to simulate actions without taking them
+- **Robust error handling** - Graceful handling of API failures and edge cases
 
 ## Repository Structure
 
 ```
 reddit-llm-moderator/
-├── main.py                    # Main entry point for both CLI and MCP modes
-├── requirements.txt           # Project dependencies
+├── main.py                    # Main entry point for CLI
+├── requirements.txt           # Project dependencies (minimal)
 ├── config.yaml.template      # Template for configuration file
 ├── rules.yaml.template       # Template for rules configuration
 ├── cli/                      # Command-line interface implementation
 │   └── moderator.py         # CLI-specific moderation logic
-├── mcp/                      # Model Context Protocol server implementation
-│   └── server.py            # MCP server implementation with FastAPI
-├── shared/                   # Shared code used by both CLI and MCP
-│   ├── LLMProvider.py       # LLM provider implementations (OpenAI, Anthropic, Gemini, Ollama)
+├── shared/                   # Shared code and utilities
+│   ├── LLMProvider.py       # Google Gemini LLM provider implementation
 │   ├── Moderation.py        # Core moderation data models
 │   ├── ModerationService.py # Moderation service implementation
 │   ├── NotificationStrategy.py # Notification strategies (public/modmail)
 │   ├── RuleMatcher.py       # Rule matching logic with type conversion
 │   └── utils.py             # Utility functions and logging
 ├── examples/                 # Example implementations and demos
-│   ├── demo.py              # Demo script
-│   └── mcp_client.py        # MCP client example
+│   └── demo.py              # Demo script
 └── tests/                    # Test suite
     └── test_reddit_mod.py   # Unit tests
 ```
@@ -82,47 +69,32 @@ reddit-llm-moderator/
 
 ## Usage
 
-### CLI Mode
+### CLI Commands
 
 Basic usage:
 
-```
-python main.py --mode=cli --subreddit=SUBREDDIT_NAME [--dry-run]
+```bash
+python main.py --subreddit=SUBREDDIT_NAME [--dry-run]
 ```
 
 All available options:
 
-```
-python main.py --mode=cli --subreddit=SUBREDDIT_NAME [--dry-run] [--type=all|submissions|comments] [--notification=public|modmail] [--config=config.yaml] [--rules=rules.yaml] [--debug]
+```bash
+python main.py --subreddit=SUBREDDIT_NAME [--dry-run] [--type=all|submissions|comments] [--notification=public|modmail] [--config=config.yaml] [--rules=rules.yaml]
 ```
 
 Examples:
 
-```
+```bash
 # Process only comments, sending removal reasons via modmail
-python main.py --mode=cli --subreddit=MySubreddit --type=comments --notification=modmail
+python main.py --subreddit=MySubreddit --type=comments --notification=modmail
 
-# Simulate moderation of submissions only with debug output
-python main.py --mode=cli --subreddit=MySubreddit --type=submissions --dry-run --debug
+# Simulate moderation of submissions only (dry run)
+python main.py --subreddit=MySubreddit --type=submissions --dry-run
 
 # Use specific config and rules files
-python main.py --mode=cli --subreddit=MySubreddit --config=my_config.yaml --rules=my_rules.yaml
+python main.py --subreddit=MySubreddit --config=my_config.yaml --rules=my_rules.yaml
 ```
-
-### MCP Server Mode
-
-Start the server:
-
-```
-python main.py --mode=mcp
-```
-
-The server will start on port 8000 by default and provide the following endpoints:
-
-- `POST /initialize`: Initialize the server with config and rules
-- `GET /modqueue`: Get items from the modqueue
-- `POST /moderate`: Moderate a specific item
-- `GET /rules`: Get the configured rules
 
 ## Configuration Files
 
@@ -140,28 +112,12 @@ reddit:
 
 # LLM Configuration
 llm:
-  provider: "openai"  # Options: "openai", "anthropic", "gemini", "ollama"
   confidence_threshold: 0.8  # Minimum confidence (0.0-1.0) required to take action
-
-# OpenAI Configuration
-openai:
-  api_key: YOUR_OPENAI_API_KEY
-  model: "gpt-4-turbo"  # Optional
-
-# Anthropic Configuration
-anthropic:
-  api_key: YOUR_ANTHROPIC_API_KEY
-  model: "claude-3-opus-20240229"  # Optional
 
 # Google Gemini Configuration
 gemini:
   api_key: YOUR_GEMINI_API_KEY
   model: "gemini-1.5-pro"  # Optional
-
-# Ollama Configuration (local LLM)
-ollama:
-  model: "llama3"  # Required, specify the model you've pulled to Ollama
-  host: "http://localhost:11434"  # Optional, defaults to http://localhost:11434
 ```
 
 ### rules.yaml

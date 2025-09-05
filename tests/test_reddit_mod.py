@@ -122,7 +122,7 @@ class TestRedditMod(unittest.TestCase):
         )
         
         self.assertEqual(result.action_taken, "no_action")
-        self.assertIn("confidence", result.explanation)
+        self.assertIn("confidence", result.explanation.lower())
 
     def test_high_confidence_removal(self):
         """Test removing with high confidence"""
@@ -164,7 +164,7 @@ class TestRedditMod(unittest.TestCase):
         )
         
         self.assertEqual(result.action_taken, "no_action")
-        self.assertIn("confidence", result.explanation)
+        self.assertIn("confidence", result.explanation.lower())
 
     def test_confidence_threshold_boundary(self):
         """Test confidence threshold boundary conditions"""

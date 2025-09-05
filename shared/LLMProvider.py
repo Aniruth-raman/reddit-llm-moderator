@@ -1,328 +1,152 @@
 #!/usr/bin/env python3
 """
-Core LLM integration for Reddit LLM Moderator.
-This module provides shared LLM functionality used by both CLI and MCP versions.
+Google Gemini LLM integration for Reddit LLM Moderator.
+This module provides clean, focused LLM functionality using only Google Gemini.
 """
 
 import json
 import logging
 import re
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-
-import requests
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
 
-class LLMProvider(ABC):
-    """Abstract base class for LLM provider implementations."""
-
-    @abstractmethod
-    def evaluate_text(self, prompt: str) -> Dict[str, Any]:
-        """
-        Evaluate text using the LLM provider.
-
-        Args:
-            prompt: The prompt to send to the LLM
-
-        Returns:
-            Dict containing the evaluation result
-        """
-        pass
-
-
-class OpenAIProvider(LLMProvider):
-    """OpenAI implementation of LLM provider."""
-
-    def __init__(self, api_key: str, model: str = "gpt-4-turbo"):
-        """
-        Initialize OpenAI provider.
-
-        Args:
-            api_key: OpenAI API key
-            model: Model to use (default: gpt-4-turbo)
-        """
-        self.api_key = api_key
-        self.model = model
-
-    def evaluate_text(self, prompt: str) -> Dict[str, Any]:
-        """Evaluate text using OpenAI."""
-        try:
-            import openai
-
-            self.client = openai.OpenAI(api_key=self.api_key)
-            response = self.client.chat.completions.create(
-                model=self.model,
-                response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a Reddit moderator assistant.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=500,
-                temperature=0.2,
-            )
-
-            raw_response = response.choices[0].message.content
-            try:
-                result = json.loads(raw_response)
-                # Log the result for debugging
-                logger.debug(f"Raw JSON response: {raw_response}")
-                logger.debug(f"Parsed decision: {result}")
-
-                # Ensure rule_number is properly formatted if present
-                if (
-                        "violates" in result
-                        and result.get("violates")
-                        and "rule_number" in result
-                ):
-                    rule_num = result["rule_number"]
-                    # If rule_number is a string that can be converted to int, do so
-                    if isinstance(rule_num, str) and rule_num.isdigit():
-                        result["rule_number"] = int(rule_num)
-                        logger.debug(
-                            f"Converted rule_number from string '{rule_num}' to int {result['rule_number']}"
-                        )
-
-                return result
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON from LLM: {e}")
-                logger.error(f"Raw response: {raw_response}")
-                return {"violates": False, "error": f"Invalid JSON response: {e}"}
-        except Exception as e:
-            logger.error(f"OpenAI evaluation failed: {e}")
-            return {"violates": False, "error": str(e)}
-
-    def __str__(self):
-        return f"OpenAIProvider(model={self.model}, api_key={'*' * len(self.api_key[:-4]) + self.api_key[-4:]})"
-
-
-class AnthropicProvider(LLMProvider):
-    """Anthropic Claude implementation of LLM provider."""
-
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
-        """
-        Initialize Anthropic provider.
-
-        Args:
-            api_key: Anthropic API key
-            model: Model to use (default: claude-3-opus-20240229)
-        """
-        self.api_key = api_key
-        self.model = model
-        self.api_url = "https://api.anthropic.com/v1/messages"
-
-    def evaluate_text(self, prompt: str) -> Dict[str, Any]:
-        """Evaluate text using Anthropic Claude."""
-        try:
-            headers = {
-                "Content-Type": "application/json",
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-            }
-
-            data = {
-                "model": self.model,
-                "max_tokens": 500,
-                "temperature": 0.2,
-                "system": "You are a Reddit moderator assistant. Respond only with valid JSON.",
-                "messages": [{"role": "user", "content": prompt}],
-            }
-
-            response = requests.post(self.api_url, headers=headers, json=data)
-            response.raise_for_status()
-
-            response_data = response.json()
-            content = response_data["content"][0]["text"]
-
-            # Extract JSON from response
-            try:
-                result = json.loads(content)
-                return result
-            except json.JSONDecodeError:
-                # Try to extract JSON from the content if it's wrapped in text
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group(0))
-                    return result
-                else:
-                    raise ValueError("Could not parse JSON from response")
-
-        except Exception as e:
-            logger.error(f"Anthropic evaluation failed: {e}")
-            return {"violates": False, "error": str(e)}
-
-    def __str__(self):
-        return f"AnthropicProvider(model={self.model}, api_key={'*' * len(self.api_key[:-4]) + self.api_key[-4:]})"
-
-
-class GeminiProvider(LLMProvider):
-    """Google Gemini implementation of LLM provider."""
+class GeminiLLMProvider:
+    """Google Gemini LLM provider for Reddit moderation tasks."""
 
     def __init__(self, api_key: str, model: str = "gemini-1.5-pro"):
         """
         Initialize Google Gemini provider.
 
         Args:
-            api_key: Google API key
+            api_key: Google API key for authentication
             model: Model to use (default: gemini-1.5-pro)
+        
+        Raises:
+            ValueError: If api_key is empty or None
         """
-        self.api_key = api_key
+        if not api_key or not api_key.strip():
+            raise ValueError("API key cannot be empty")
+        
+        self.api_key = api_key.strip()
         self.model = model
+        self._generation_config = {
+            "temperature": 0.2,
+            "top_p": 0.95,
+            "top_k": 0,
+            "max_output_tokens": 500,
+        }
 
     def evaluate_text(self, prompt: str) -> Dict[str, Any]:
-        """Evaluate text using Google Gemini."""
+        """
+        Evaluate text using Google Gemini.
+
+        Args:
+            prompt: The prompt to send to the LLM
+
+        Returns:
+            Dict containing the evaluation result with keys:
+            - violates: Boolean indicating if content violates rules
+            - confidence: Float between 0-1 indicating confidence level
+            - explanation: String explanation of the decision
+            - rule_number: Integer rule number if violation found
+            - error: String error message if evaluation failed
+        """
+        if not prompt or not prompt.strip():
+            return {"violates": False, "error": "Empty prompt provided"}
+
         try:
             import google.generativeai as genai
+        except ImportError:
+            logger.error("google-generativeai package not installed")
+            return {"violates": False, "error": "Gemini package not available"}
 
+        try:
             # Configure the Gemini API
             genai.configure(api_key=self.api_key)
 
             # Setup model
             model = genai.GenerativeModel(
                 model_name=self.model,
-                generation_config={
-                    "temperature": 0.2,
-                    "top_p": 0.95,
-                    "top_k": 0,
-                    "max_output_tokens": 500,
-                },
+                generation_config=self._generation_config,
             )
 
-            # Create system prompt + user prompt
+            # Create comprehensive prompt
             system_prompt = (
-                "You are a Reddit moderator assistant. Respond only with valid JSON."
+                "You are a Reddit moderator assistant. "
+                "Respond only with valid JSON containing your moderation decision."
             )
             full_prompt = f"{system_prompt}\n\n{prompt}"
 
             # Generate content
             response = model.generate_content(full_prompt)
 
-            # Try parsing the response as JSON
-            try:
-                result = json.loads(response.text)
-                return result
-            except json.JSONDecodeError:
-                # Try to extract JSON from the content if it's wrapped in text
-                json_match = re.search(r"\{.*\}", response.text, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group(0))
-                    return result
-                else:
-                    raise ValueError(
-                        f"Could not parse JSON from response: {response.text[:100]}..."
-                    )
+            if not response or not response.text:
+                return {"violates": False, "error": "Empty response from Gemini"}
+
+            # Parse JSON response
+            return self._parse_response(response.text)
 
         except Exception as e:
-            logger.error(f"Google Gemini evaluation failed: {e}")
-            return {"violates": False, "error": str(e)}
+            error_msg = f"Google Gemini evaluation failed: {str(e)}"
+            logger.error(error_msg)
+            return {"violates": False, "error": error_msg}
 
-    def __str__(self):
-        return f"GeminiProvider(model={self.model}, api_key={'*' * len(self.api_key[:-4]) + self.api_key[-4:]})"
-
-
-class OllamaProvider(LLMProvider):
-    """Ollama implementation of LLM provider for local LLM inference."""
-
-    def __init__(self, model: str = "llama3", host: str = "http://localhost:11434"):
+    def _parse_response(self, response_text: str) -> Dict[str, Any]:
         """
-        Initialize Ollama provider.
+        Parse the response text to extract JSON.
 
         Args:
-            model: Model name in Ollama (default: llama3)
-            host: Ollama API host (default: http://localhost:11434)
-        """
-        self.model = model
-        self.host = host
-        self.api_url = f"{host}/api/generate"
-
-    def evaluate_text(self, prompt: str) -> Dict[str, Any]:
-        """Evaluate text using local Ollama instance."""
-        try:
-            headers = {"Content-Type": "application/json"}
-
-            # Add clear instructions to return JSON
-            system_prompt = (
-                "You are a Reddit moderator assistant. Respond only with valid JSON."
-            )
-            full_prompt = f"{system_prompt}\n\n{prompt}\n\nRemember to respond ONLY with the JSON object, nothing else."
-
-            data = {
-                "model": self.model,
-                "prompt": full_prompt,
-                "stream": False,
-                "options": {"temperature": 0.2, "num_predict": 500},
-            }
-            logger.info(
-                f"Sending request to Ollama: {self.api_url} with headers= {headers} and json: {data}"
-            )
-            response = requests.post(self.api_url, headers=headers, json=data)
-            response.raise_for_status()
-
-            response_data = response.json()
-            content = response_data["response"]
-
-            # Extract JSON from response
-            try:
-                result = json.loads(content)
-                return result
-            except json.JSONDecodeError:
-                # Try to extract JSON from the content if it's wrapped in text
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group(0))
-                    return result
-                else:
-                    raise ValueError(
-                        f"Could not parse JSON from Ollama response: {content[:100]}..."
-                    )
-
-        except Exception as e:
-            logger.error(f"Ollama evaluation failed: {e}")
-            return {"violates": False, "error": str(e)}
-
-    def __str__(self):
-        return f"OllamaProvider(model={self.model}, host={self.host})"
-
-
-class LLMProviderFactory:
-    """Factory for creating LLM provider instances."""
-
-    @staticmethod
-    def create_provider(
-            provider_name: str, config: Dict[str, Any]
-    ) -> Optional[LLMProvider]:
-        """
-        Create an LLM provider instance based on name and config.
-
-        Args:
-            provider_name: Name of the provider (openai, anthropic, gemini, ollama)
-            config: Configuration dictionary with API keys and settings
+            response_text: Raw response text from Gemini
 
         Returns:
-            LLMProvider instance or None if provider is not supported
+            Parsed JSON dictionary or error response
         """
-        if provider_name == "openai":
-            return OpenAIProvider(
-                api_key=config["api_key"], model=config.get("model", "gpt-4-turbo")
-            )
-        elif provider_name == "anthropic":
-            return AnthropicProvider(
-                api_key=config["api_key"],
-                model=config.get("model", "claude-3-opus-20240229"),
-            )
-        elif provider_name == "gemini":
-            return GeminiProvider(
-                api_key=config["api_key"], model=config.get("model", "gemini-1.5-pro")
-            )
-        elif provider_name == "ollama":
-            return OllamaProvider(
-                model=config.get("model", "llama3"),
-                host=config.get("host", "http://localhost:11434"),
-            )
-        else:
-            logger.error(f"Unsupported LLM provider: {provider_name}")
-            return None
+        # First try direct JSON parsing
+        try:
+            result = json.loads(response_text)
+            logger.debug(f"Successfully parsed JSON response: {result}")
+            return result
+        except json.JSONDecodeError:
+            # Try to extract JSON from wrapped text
+            json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group(0))
+                    logger.debug(f"Extracted JSON from wrapped text: {result}")
+                    return result
+                except json.JSONDecodeError:
+                    pass
+
+        # If all parsing fails
+        error_msg = f"Could not parse JSON from response: {response_text[:100]}..."
+        logger.error(error_msg)
+        return {"violates": False, "error": error_msg}
+
+    def __str__(self) -> str:
+        """String representation of the provider."""
+        masked_key = f"{'*' * (len(self.api_key) - 4)}{self.api_key[-4:]}" if len(self.api_key) >= 4 else "****"
+        return f"GeminiLLMProvider(model={self.model}, api_key={masked_key})"
+
+
+def create_gemini_provider(config: Dict[str, Any]) -> GeminiLLMProvider:
+    """
+    Factory function to create a Gemini provider from configuration.
+
+    Args:
+        config: Configuration dictionary with 'api_key' and optional 'model'
+
+    Returns:
+        Configured GeminiLLMProvider instance
+
+    Raises:
+        ValueError: If required configuration is missing
+    """
+    if "api_key" not in config:
+        raise ValueError("Gemini configuration must include 'api_key'")
+
+    return GeminiLLMProvider(
+        api_key=config["api_key"],
+        model=config.get("model", "gemini-1.5-pro")
+    )
