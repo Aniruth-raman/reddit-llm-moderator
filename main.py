@@ -33,15 +33,18 @@ def main():
     print(f"Processing {len(items)} items from r/{subreddit_name}")
     
     for item in items:
-        content = item.title if hasattr(item, 'title') else item.body
-        confidence = evaluator.evaluate(content, rules)
+        decision = evaluator.evaluate(item, rules)
+        confidence = decision.get('confidence', 0)
+        violates = decision.get('violates', False)
         
-        if confidence >= approve_threshold:
+        if violates and confidence >= remove_threshold:
+            rule_num = decision.get('rule_number', 'Unknown')
+            reason = decision.get('explanation', 'Rule violation')
+            remove_item(item, f"Rule {rule_num}: {reason}")
+            print(f"✗ Removed (Rule {rule_num}, confidence: {confidence}%)")
+        elif not violates and confidence >= approve_threshold:
             approve_item(item)
             print(f"✓ Approved (confidence: {confidence}%)")
-        elif confidence <= remove_threshold:
-            remove_item(item)
-            print(f"✗ Removed (confidence: {confidence}%)")
         else:
             print(f"? Skipped (confidence: {confidence}%)")
 
