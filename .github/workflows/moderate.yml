@@ -1,0 +1,41 @@
+name: Reddit Moderation Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no actual actions)'
+        required: false
+        default: 'true'
+        type: boolean
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  moderate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+        
+    - name: Install dependencies
+      run: uv sync
+        
+    - name: Create config files from secrets
+      run: |
+        echo "${{ secrets.CONFIG }}" > config.yaml
+        echo "${{ secrets.RULES }}" > rules.yaml
+        
+    - name: Run Reddit Moderation
+      run: |
+        uv run main.py \
+          ${{ inputs.dry_run == true && '--dry-run' || '' }} \
+          ${{ inputs.debug == true && '--debug' || '' }}
