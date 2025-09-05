@@ -1,0 +1,50 @@
+name: Reddit Moderation Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no actual actions)'
+        required: false
+        default: 'true'
+        type: boolean
+      disable_remove:
+        description: 'Disable remove actions (comment out line 139)'
+        required: false
+        default: 'false'
+        type: boolean
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  moderate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # Minimal timeout for quick execution
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run Reddit Moderation
+      env:
+        # Pass secrets as environment variables
+        REDDIT_CONFIG_YAML: ${{ secrets.REDDIT_CONFIG_YAML }}
+        REDDIT_RULES_YAML: ${{ secrets.REDDIT_RULES_YAML }}
+      run: |
+        python main.py \
+          ${{ inputs.dry_run == true && '--dry-run' || '' }} \
+          ${{ inputs.disable_remove == true && '--disable-remove' || '' }} \
+          ${{ inputs.debug == true && '--debug' || '' }}
