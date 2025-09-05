@@ -136,7 +136,7 @@ class ModerationService:
             if item_details['link']:
                 logger.info(f"   Link: {item_details['link']}")
         else:
-            remove_item(item, f"Rule {rule_num}: {reason}")
+            # remove_item(item, f"Rule {rule_num}: {reason}")
             logger.info(log_header)
             logger.info(log_content)
             logger.info(log_reason)
