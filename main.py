@@ -3,7 +3,6 @@
 Follows SOLID principles with proper dependency injection and separation of concerns."""
 import argparse
 import logging
-import os
 import sys
 import yaml
 from reddit_ops import create_reddit_client, fetch_modqueue_items, approve_item, remove_item
@@ -18,29 +17,13 @@ class ConfigManager:
     
     @staticmethod
     def load_config(config_path='config.yaml'):
-        """Load configuration from YAML file or environment variable."""
-        # Check if config is provided via environment variable
-        config_env = os.getenv('REDDIT_CONFIG_YAML')
-        if config_env:
-            logger.info("📝 Loading configuration from environment variable")
-            return yaml.safe_load(config_env)
-        
-        # Fallback to file loading
-        logger.info(f"📝 Loading configuration from file: {config_path}")
+        """Load configuration from YAML file."""
         with open(config_path, 'r') as f:
             return yaml.safe_load(f)
     
     @staticmethod
     def load_rules(rules_path='rules.yaml'):
-        """Load subreddit rules from YAML file or environment variable."""
-        # Check if rules are provided via environment variable
-        rules_env = os.getenv('REDDIT_RULES_YAML')
-        if rules_env:
-            logger.info("📝 Loading rules from environment variable")
-            return yaml.safe_load(rules_env)['rules']
-        
-        # Fallback to file loading
-        logger.info(f"📝 Loading rules from file: {rules_path}")
+        """Load subreddit rules from YAML file."""
         with open(rules_path, 'r') as f:
             return yaml.safe_load(f)['rules']
 
@@ -48,14 +31,13 @@ class ConfigManager:
 class ModerationService:
     """Main moderation service following Single Responsibility Principle."""
     
-    def __init__(self, reddit_client, llm_evaluator, config, dry_run=False, disable_remove=False):
+    def __init__(self, reddit_client, llm_evaluator, config, dry_run=False):
         self.reddit = reddit_client
         self.evaluator = llm_evaluator
         self.approve_threshold = config.get('approve_threshold', 80)
         self.remove_threshold = config.get('remove_threshold', 70)
         self.subreddit_name = config['reddit']['subreddit']
         self.dry_run = dry_run
-        self.disable_remove = disable_remove
     
     def process_modqueue(self, rules):
         """Process modqueue items with confidence-based thresholds."""
@@ -153,14 +135,7 @@ class ModerationService:
             logger.info(f"   Reason: {reason}")
             if item_details['link']:
                 logger.info(f"   Link: {item_details['link']}")
-        elif self.disable_remove:
-            logger.info(f"⏸️  [REMOVE DISABLED] Would remove (Rule {rule_num}, confidence: {confidence}%)")
-            logger.info(f"   Content: {item_details['display']}")
-            logger.info(f"   Reason: {reason}")
-            if item_details['link']:
-                logger.info(f"   Link: {item_details['link']}")
         else:
-            # remove_item(item, f"Rule {rule_num}: {reason}")  # Line 139 - commented out when disable_remove is True
             remove_item(item, f"Rule {rule_num}: {reason}")
             logger.info(log_header)
             logger.info(log_content)
@@ -228,8 +203,6 @@ def main():
     parser = argparse.ArgumentParser(description='Reddit LLM Moderator')
     parser.add_argument('--dry-run', action='store_true', 
                        help='Run in dry-run mode (show suggestions without taking action)')
-    parser.add_argument('--disable-remove', action='store_true',
-                       help='Disable remove actions (equivalent to commenting out line 139)')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug logging')
     parser.add_argument('--log-file', type=str,
@@ -247,8 +220,6 @@ def main():
     logger.info("🤖 Reddit LLM Moderator Starting")
     if args.dry_run:
         logger.info("🔍 DRY RUN Mode - No actions will be taken")
-    if args.disable_remove:
-        logger.info("⏸️  REMOVE DISABLED Mode - Remove actions are disabled")
     logger.info("=" * 60)
     
     # Load configuration and rules
@@ -262,9 +233,7 @@ def main():
     evaluator = get_llm_evaluator(config)
     
     # Create and run moderation service
-    moderation_service = ModerationService(reddit, evaluator, config, 
-                                         dry_run=args.dry_run, 
-                                         disable_remove=args.disable_remove)
+    moderation_service = ModerationService(reddit, evaluator, config, dry_run=args.dry_run)
     moderation_service.process_modqueue(rules)
 
 

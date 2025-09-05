@@ -7,9 +7,9 @@ This document explains how to set up and use the minimal GitHub workflow for Red
 The minimal workflow provides:
 - **On-demand execution**: Manual trigger via GitHub Actions UI
 - **Secret-based configuration**: Config and rules passed securely via GitHub secrets  
-- **Flexible execution modes**: Dry-run, disable-remove, and debug options
-- **Minimal footprint**: 10-minute timeout, efficient resource usage
-- **Line 139 control**: Option to comment out remove actions at runtime
+- **Flexible execution modes**: Dry-run and debug options
+- **Minimal footprint**: 10-minute timeout, efficient resource usage using uv
+- **UV dependency management**: Fast and efficient Python environment setup
 
 ## Required GitHub Secrets
 
@@ -71,7 +71,6 @@ rules:
 3. Click "Run workflow"
 4. Configure the options:
    - **dry_run**: Set to `true` to see what would happen without taking action
-   - **disable_remove**: Set to `true` to comment out line 139 (disable remove actions)
    - **debug**: Set to `true` for detailed logging
 
 ## Usage Examples
@@ -79,45 +78,32 @@ rules:
 ### Safe Testing Mode
 ```
 dry_run: true
-disable_remove: true  
 debug: true
 ```
 This mode shows what would happen without taking any actions and provides detailed logging.
 
-### Production Mode with Remove Disabled
+### Production Mode
 ```
 dry_run: false
-disable_remove: true
 debug: false
 ```
-This mode processes the modqueue but doesn't remove items (line 139 commented out).
-
-### Full Production Mode
-```
-dry_run: false
-disable_remove: false
-debug: false
-```
-This mode processes the modqueue with all actions enabled.
+This mode processes the modqueue and takes moderation actions.
 
 ## Local Testing
 
-You can also test the functionality locally using environment variables:
+You can test the functionality locally with config files:
 
 ```bash
-export REDDIT_CONFIG_YAML="$(cat config.yaml)"
-export REDDIT_RULES_YAML="$(cat rules.yaml)"
-
-# Test with disable-remove flag
-python main.py --dry-run --disable-remove --debug
+# Test in dry-run mode
+python main.py --dry-run --debug
 
 # Test normal operation  
-python main.py --dry-run --debug
+python main.py --debug
 ```
 
 ## Workflow Features
 
-- **Minimal footprint**: Uses only necessary dependencies
+- **Minimal footprint**: Uses uv for fast dependency management
 - **10-minute timeout**: Ensures quick execution
 - **Manual trigger only**: Runs only when you need it
 - **Secret-based configuration**: No sensitive data in repository
@@ -138,17 +124,4 @@ If the workflow fails:
 1. Check that both secrets are properly set in GitHub
 2. Verify the YAML format of your secrets is valid
 3. Review the workflow logs for specific error messages
-4. Test locally first using environment variables
-
-## What Line 139 Does
-
-Line 139 in the original `main.py` contains:
-```python
-remove_item(item, f"Rule {rule_num}: {reason}")
-```
-
-When `--disable-remove` is used, this line is effectively commented out, meaning:
-- The application will identify rule violations
-- It will log what it would remove
-- But it won't actually remove any content
-- This provides a safe way to test moderation logic
+4. Test locally first with config files in the repository root
