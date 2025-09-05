@@ -28,8 +28,8 @@ jobs:
         
     - name: Create config files from secrets
       run: |
-        echo "${{ secrets.REDDIT_CONFIG_YAML }}" > config.yaml
-        echo "${{ secrets.REDDIT_RULES_YAML }}" > rules.yaml
+        echo "${{ secrets.CONFIG }}" > config.yaml
+        echo "${{ secrets.RULES }}" > rules.yaml
         
     - name: Run Reddit Moderation
       run: |

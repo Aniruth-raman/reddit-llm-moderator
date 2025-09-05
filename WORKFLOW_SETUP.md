@@ -15,7 +15,7 @@ The minimal workflow provides:
 
 You need to set up the following secrets in your GitHub repository:
 
-### 1. REDDIT_CONFIG_YAML
+### 1. CONFIG
 
 This should contain your complete configuration as a YAML string:
 
@@ -37,7 +37,7 @@ llm_provider:
   model: "gemini-1.5-pro"
 ```
 
-### 2. REDDIT_RULES_YAML
+### 2. RULES
 
 This should contain your subreddit rules as a YAML string:
 
@@ -62,7 +62,7 @@ rules:
 2. Click on "Settings" tab
 3. In the left sidebar, click on "Secrets and variables" → "Actions"
 4. Click "New repository secret"
-5. Add both `REDDIT_CONFIG_YAML` and `REDDIT_RULES_YAML` secrets
+5. Add both `CONFIG` and `RULES` secrets
 
 ## Running the Workflow
 
@@ -107,8 +107,7 @@ python main.py --debug
 - **10-minute timeout**: Ensures quick execution
 - **Manual trigger only**: Runs only when you need it
 - **Secret-based configuration**: No sensitive data in repository
-- **Flexible options**: Control dry-run, remove actions, and logging
-- **Line 139 control**: Option to disable remove_item() calls at runtime
+- **Flexible options**: Control dry-run and debug logging
 
 ## Security Notes
 
