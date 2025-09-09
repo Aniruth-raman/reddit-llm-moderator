@@ -37,4 +37,4 @@ jobs:
     
     - name: Run Reddit Moderation
       run: |
-        uv run main.py ${{ inputs.dry_run == 'true' ? '--dry-run' : '' }} ${{ inputs.debug == 'true' ? '--debug' : '' }}
+          uv run main.py ${{ (inputs.dry_run == 'true') && '--dry-run' || '' }} ${{ (inputs.debug == 'true') && '--debug' || '' }}
