@@ -30,12 +30,11 @@ jobs:
       run: uv sync
         
     - name: Create config files from secrets
+      shell: bash
       run: |
-        echo "${{ secrets.CONFIG }}" > config.yaml
-        echo "${{ secrets.RULES }}" > rules.yaml
-        
+        echo "${{ secrets.RULES }}" | tee rules.yaml
+        echo "${{ secrets.CONFIG }}" | tee config.yaml
+    
     - name: Run Reddit Moderation
       run: |
-        uv run main.py \
-          ${{ inputs.dry_run == true && '--dry-run' || '' }} \
-          ${{ inputs.debug == true && '--debug' || '' }}
+        uv run main.py ${{ inputs.dry_run == 'true' ? '--dry-run' : '' }} ${{ inputs.debug == 'true' ? '--debug' : '' }}
