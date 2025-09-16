@@ -41,7 +41,7 @@ class ModerationService:
     
     def process_modqueue(self, rules):
         """Process modqueue items with confidence-based thresholds."""
-        items = fetch_modqueue_items(self.reddit, self.subreddit_name)
+        items = fetch_modqueue_items(self.reddit, self.subreddit_name,20)
         logger.info(f"📥 Processing {len(items)} items from r/{self.subreddit_name}")
         logger.info(f"⚙️  Settings: approve≥{self.approve_threshold}%, remove≥{self.remove_threshold}%")
         logger.info("=" * 60)
