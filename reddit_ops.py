@@ -12,7 +12,7 @@ class RedditOperations(ABC):
     """Abstract interface for Reddit operations following Interface Segregation Principle."""
     
     @abstractmethod
-    def fetch_modqueue_items(self, subreddit_name, limit=10):
+    def fetch_modqueue_items(self, subreddit_name, limit=17):
         """Fetch items from moderation queue."""
         pass
     
