@@ -8,17 +8,19 @@ on:
 jobs:
   moderate:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       packages: read
     steps:
       - name: Create rules.yaml from secret
-        run: echo "${{ secrets.RULES_YAML }}" > rules.yaml
+        run: echo "${{ secrets.RULES_YAML }}" > /app/rules.yaml
 
       - name: Create config.yaml from secret
-        run: echo "${{ secrets.CONFIG_YAML }}" > config.yaml
-
-      - name: Pull Docker image
-        run: docker pull ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
+        run: echo "${{ secrets.CONFIG_YAML }}" > /app/config.yaml
 
       - name: Run moderation
-        run: docker run --rm -v $(pwd)/rules.yaml:/app/rules.yaml -v $(pwd)/config.yaml:/app/config.yaml ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
+        run: python /app/main.py

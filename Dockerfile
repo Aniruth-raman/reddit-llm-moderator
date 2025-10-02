@@ -1,11 +1,18 @@
-FROM python:3.9-slim
+# Stage 1: Build dependencies
+FROM python:3.9-slim-buster AS builder
+WORKDIR /install
+COPY requirements.txt .
+RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
 
+# Stage 2: Create a minimal runtime image
+FROM python:3.9-slim-buster
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy the installed dependencies from the builder stage
+COPY --from=builder /install /usr/local
 
-RUN pip install -r requirements.txt
+# Copy your application files (not dependencies)
+COPY . /app
 
-COPY . .
-
-CMD ["python", "main.py"]
+# The ENTRYPOINT can be set to just the python executable
+ENTRYPOINT ["python"]
