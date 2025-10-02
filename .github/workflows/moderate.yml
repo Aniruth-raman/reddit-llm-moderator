@@ -10,13 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: read
-    container: ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
     steps:
-      - name: Create rules.yml from secret
-        run: echo "${{ secrets.RULES_YAML }}" > /app/rules.yml
+      - name: Create rules.yaml from secret
+        run: echo "${{ secrets.RULES_YAML }}" > rules.yaml
 
-      - name: Create config.yml from secret
-        run: echo "${{ secrets.CONFIG_YAML }}" > /app/config.yml
+      - name: Create config.yaml from secret
+        run: echo "${{ secrets.CONFIG_YAML }}" > config.yaml
+
+      - name: Pull Docker image
+        run: docker pull ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
 
       - name: Run moderation
-        run: python main.py
+        run: docker run --rm -v $(pwd)/rules.yaml:/app/rules.yaml -v $(pwd)/config.yaml:/app/config.yaml ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
