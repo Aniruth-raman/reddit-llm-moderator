@@ -2,20 +2,35 @@ name: Moderate
 
 on:
   schedule:
-    - cron: '0 4-15 * * *'
+    - cron: "0 4-15 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in dry-run mode no actual actions"
+        required: false
+        default: false
+        type: boolean
+      debug:
+        description: "Enable debug logging"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   moderate:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/aniruth-raman/reddit-llm-moderator/reddit-moderator:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      packages: read
+    timeout-minutes: 10
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync
+
       - name: Create config files from secrets
         env:
           CONFIG_YAML: ${{ secrets.CONFIG }}
@@ -23,5 +38,12 @@ jobs:
         run: |
           echo "$CONFIG_YAML" > config.yaml
           echo "$RULES_YAML" > rules.yaml
-      - name: Run moderation
-        run: python /app/main.py
+
+      - name: Run Reddit Moderation
+        env:
+          DRY_RUN_FLAG: ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+          DEBUG_FLAG: ${{ inputs.debug == 'true' && '--debug' || '' }}
+        run: |
+          echo "Dry run flag: $DRY_RUN_FLAG"
+          echo "Debug flag: $DEBUG_FLAG"
+          uv run main.py $DRY_RUN_FLAG $DEBUG_FLAG
