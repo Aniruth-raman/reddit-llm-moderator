@@ -16,11 +16,12 @@ jobs:
     permissions:
       packages: read
     steps:
-      - name: Create rules.yaml from secret
-        run: echo "${{ secrets.RULES_YAML }}" > /app/rules.yaml
-
-      - name: Create config.yaml from secret
-        run: echo "${{ secrets.CONFIG_YAML }}" > /app/config.yaml
-
+      - name: Create config files from secrets
+        env:
+          CONFIG_YAML: ${{ secrets.CONFIG }}
+          RULES_YAML: ${{ secrets.RULES }}
+        run: |
+          echo "$CONFIG_YAML" > config.yaml
+          echo "$RULES_YAML" > rules.yaml
       - name: Run moderation
         run: python /app/main.py
