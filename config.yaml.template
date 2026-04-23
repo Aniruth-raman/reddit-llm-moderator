@@ -7,12 +7,17 @@ reddit:
   user_agent: "RedditModerator/1.0 by YourUsername"
   subreddit: "YourSubreddit"
 
-# Moderation thresholds
-approve_threshold: 80
-remove_threshold: 70
+# Moderation Configuration
+moderation:
+  modqueue_limit: 16
+  approve_threshold: 80
+  report_threshold: 70
+  report_marker: "LLM-AUTO:"
 
 # LLM Provider Configuration
 llm_provider:
-  provider: "gemini"  # Currently supported: gemini
-  api_key: "YOUR_GEMINI_API_KEY"
-  model: "gemini-1.5-pro"
+  api_key: "YOUR_OPENROUTER_API_KEY"
+  model: "openai/gpt-4o-mini"
+  base_url: "https://openrouter.ai/api/v1/chat/completions"
+  site_url: "https://your-site.example.com"
+  app_name: "reddit-llm-moderator"

@@ -1,88 +1,127 @@
 # Contributing to Reddit LLM Moderator
 
-Thank you for considering contributing to Reddit LLM Moderator! This document provides guidelines and instructions for contribution.
-
-## Code of Conduct
-
-Please be respectful and considerate of others when contributing to this project. We aim to foster an inclusive and welcoming environment.
-
-## Ways to Contribute
-
-- Report bugs
-- Suggest new features or enhancements
-- Improve documentation
-- Submit pull requests to fix issues or add features
+Thanks for contributing! This guide covers development setup and the current minimal architecture.
 
 ## Development Setup
 
-1. Fork the repository on GitHub
-2. Clone your fork:
+1. Fork and clone the repository
+2. Create a feature branch
+3. Install dependencies:
    ```bash
-   git clone https://github.com/yourusername/reddit-llm-moderator.git
-   cd reddit-llm-moderator
+   uv sync
    ```
-3. Create a feature branch:
+4. Test your changes:
    ```bash
-   git checkout -b feature/your-feature-name
-   ```
-4. Install development dependencies:
-   ```bash
-   pip install -r requirements.txt
-   pip install pytest pytest-cov flake8
-   ```
-5. Make your changes
-6. Run the tests and linting:
-   ```bash
-   pytest
-   flake8
+   python main.py --dry-run --debug
    ```
 
 ## Project Structure
 
-```
+```text
 reddit-llm-moderator/
-├── main.py                # Main entry point for both CLI and MCP modes
-├── cli/                   # Command-line interface implementation
-│   └── reddit_mod.py      # CLI-specific code
-├── mcp/                   # Model Context Protocol server implementation
-│   └── server.py          # FastAPI server for the MCP implementation
-└── shared/                # Shared code used by both CLI and MCP
-    ├── llm_core.py        # LLM provider implementations
-    ├── models.py          # Data models for the application
-    ├── moderation.py      # Moderation service and strategies
-    └── utils.py           # Utility functions
+├── main.py                 # CLI entrypoint, logging setup
+├── models.py               # Frozen dataclasses (Rule, ModerationItem, Decision)
+├── openrouter.py           # OpenRouter API integration
+├── moderation.py           # Workflow, Reddit ops, config loading
+├── config.yaml.template    # Config template
+├── rules.yaml.template     # Rules template
+├── pyproject.toml          # Dependencies (praw, pyyaml)
+└── .github/
+    └── workflows/
+        └── moderate.yml    # GitHub Actions workflow
 ```
 
-## Adding a New LLM Provider
+## Key Components
 
-1. Implement the provider in `shared/llm_core.py` by adding a new class that inherits from `LLMProvider`
-2. Implement the `evaluate_text()` method
-3. Add the provider to the `LLMProviderFactory` class
-4. Update the configuration format in `config.yaml`
-5. Add tests for your new provider
+### main.py
+- CLI entrypoint (~50 lines)
+- Argument parsing (--dry-run, --debug, --config, --rules, --log-file)
+- Logging configuration
+- Calls `moderation.process_modqueue()`
 
-## Pull Request Process
+### models.py
+- `Rule`: frozen dataclass with number, title, explanation
+- `ModerationItem`: item_id, item_type, title, body, author, permalink
+- `ModerationDecision`: violates, confidence, rule_number, explanation
 
-1. Update documentation as needed
-2. Add tests for new functionality
-3. Ensure all tests pass
-4. Update the README.md if needed
-5. Submit a pull request with a clear description of the changes
+### openrouter.py
+- `evaluate(item, rules)`: Main entry point
+- `create_prompt(item, rules)`: Builds LLM prompt
+- `generate_content(prompt)`: HTTP POST to OpenRouter
+- `parse_response(response)`: JSON parsing + error handling
+- `normalize_confidence(raw_value)`: Clamps confidence to 0-100
 
-## Style Guidelines
+### moderation.py
+- `load_config()`: YAML validation (required: reddit, moderation, llm_provider)
+- `load_rules()`: YAML parsing to Rule objects
+- `fetch_modqueue_items()`: Filters unreported items, stops at limit
+- `has_user_report(item)`: Checks item.user_reports list
+- `process_modqueue()`: Main workflow loop
+- `process_item(item)`: LLM evaluation + approve/report decision
+- `build_report_reason()`: Formats reason with truncation (99 chars max)
 
-- Follow PEP 8 style guide
-- Use clear, descriptive variable and function names
-- Add docstrings to all functions, classes, and modules
-- Keep functions focused on a single responsibility
-- Write meaningful commit messages
+## Working with the Code
+
+### Adding a feature
+
+1. Identify which module owns the change (models, openrouter, moderation, main)
+2. Keep changes minimal and focused
+3. Test with `--dry-run --debug`
+4. Update relevant docs (README, RUNNING, CONTRIBUTING)
+
+### Modifying LLM integration
+
+- Edit `openrouter.py` only (OpenRouter is hardcoded, no factory pattern)
+- Update prompt in `create_prompt()` if changing evaluation logic
+- Test with actual Reddit modqueue items
+
+### Modifying Reddit operations
+
+- Edit `fetch_modqueue_items()` for fetching behavior
+- Edit `process_item()` for approve/report logic
+- Edit `build_report_reason()` for reason formatting
+- All in `moderation.py`
+
+### Modifying config schema
+
+- Update `load_config()` validation in `moderation.py`
+- Update `config.yaml.template` and `config.yaml.bkp`
+- Update docs (README, RUNNING)
 
 ## Testing
 
-- All new features should have corresponding tests
-- Run the test suite before submitting a pull request
-- Aim for good test coverage of your code
+### Dry-run test
 
-## License
+```bash
+python main.py --dry-run --debug
+```
 
-By contributing to this project, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).
+Evaluates modqueue, logs decisions, no Reddit actions.
+
+### Single item test
+
+Edit `moderation.py` temporarily to hardcode a test item, then run.
+
+## Pull Request Guidelines
+
+- **Keep it minimal**: Single responsibility per PR
+- **Test locally**: Use `--dry-run` first
+- **Update docs**: README, RUNNING, CONTRIBUTING if behavior changes
+- **Clear message**: Explain what changed and why
+- **No dependencies**: Don't add new packages without discussion
+
+## Style Guidelines
+
+- Follow PEP 8
+- Keep functions small and focused
+- Use type hints where helpful
+- Prefer clarity over cleverness
+- Comment complex logic
+
+## Architecture Constraints
+
+- **OpenRouter only**: No provider factory, hardcoded (minimalism)
+- **Approve + Report only**: No remove action
+- **User-report filtering**: Skip items already flagged by users
+- **Config flat**: No nested providers map, no mode field
+- **~500 LOC total**: Keep total codebase small

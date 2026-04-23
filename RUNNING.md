@@ -1,16 +1,18 @@
 # Running Reddit LLM Moderator
 
-This guide provides instructions for setting up and running the Reddit LLM Moderator in both CLI and MCP server modes.
+Instructions for setting up and running the Reddit LLM Moderator.
 
 ## Prerequisites
 
-- Python 3.9 or higher
-- Reddit API credentials (client ID, client secret, username, password)
-- API key for at least one LLM provider (OpenAI, Anthropic, Google Gemini, or Ollama installed locally)
+- Python 3.13+
+- Reddit API credentials:
+  - Client ID
+  - Client secret
+  - Reddit username
+  - Reddit password
+- OpenRouter API key
 
 ## Installation
-
-### From Source
 
 1. Clone the repository:
    ```bash
@@ -18,134 +20,129 @@ This guide provides instructions for setting up and running the Reddit LLM Moder
    cd reddit-llm-moderator
    ```
 
-2. Install the dependencies:
+2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
 
-3. Configure the application:
+3. Create config and rules:
    ```bash
    cp config.yaml.template config.yaml
-   # Edit config.yaml with your API credentials
-   ```
-
-4. Configure your subreddit rules:
-   ```bash
    cp rules.yaml.template rules.yaml
-   # Edit rules.yaml to match your subreddit's rules
    ```
 
-## Confidence Threshold Configuration
+4. Edit files with your values.
 
-The moderator uses confidence scores to make more reliable decisions:
+## Configuration
 
-- Set `llm.confidence_threshold` in `config.yaml` (default: 0.8)
-- Only actions with confidence ≥ threshold will be taken
-- Low confidence results in "no action" instead of potentially incorrect moderation
-- This prevents false positives and makes the system more conservative
+### Reddit credentials
 
-Example in `config.yaml`:
 ```yaml
-llm:
-  confidence_threshold: 0.8  # Only act when AI is 80%+ confident
+reddit:
+  client_id: "YOUR_CLIENT_ID"
+  client_secret: "YOUR_CLIENT_SECRET"
+  username: "YOUR_USERNAME"
+  password: "YOUR_PASSWORD"
+  user_agent: "RedditModerator/1.0 by YourUsername"
+  subreddit: "YourSubreddit"
 ```
 
-## Using the CLI Mode
+### Moderation settings
 
-The CLI mode allows you to process your modqueue items directly from the command line.
+```yaml
+moderation:
+  modqueue_limit: 20              # Max items to process per run
+  approve_threshold: 80           # Confidence % to auto-approve
+  report_threshold: 70            # Confidence % to auto-report
+  report_marker: "LLM-AUTO:"     # Prefix for report reason
+```
 
-### Basic Usage
+**Workflow**:
+- Fetches unreported modqueue items (stops when limit reached)
+- User-reported items are skipped (not evaluated by LLM)
+- Each item evaluated against rules by OpenRouter
+- If confidence > `approve_threshold`: approved
+- If confidence > `report_threshold`: reported with prefixed reason
+- Otherwise: skipped for manual review
+
+### OpenRouter (hardcoded provider)
+
+```yaml
+llm_provider:
+  api_key: "YOUR_OPENROUTER_API_KEY"
+  model: "openai/gpt-4o-mini"    # Any OpenRouter model
+  base_url: "https://openrouter.ai/api/v1/chat/completions"
+  site_url: "https://your-site.example.com"
+  app_name: "reddit-llm-moderator"
+```
+
+## CLI Usage
 
 ```bash
-python main.py --mode=cli --subreddit=SUBREDDIT_NAME
+# Process modqueue
+python main.py
+
+# Dry-run (no actions taken)
+python main.py --dry-run
+
+# Debug logging
+python main.py --debug
+
+# Combined
+python main.py --dry-run --debug
+
+# Custom paths
+python main.py --config my_config.yaml --rules my_rules.yaml
+python main.py --log-file moderation.log
 ```
 
-### Options
+## Behavior
 
-- `--subreddit`, `-s`: Subreddit to moderate (required)
-- `--dry-run`, `-d`: Simulate actions without taking them
-- `--config`, `-c`: Path to config file (default: config.yaml)
-- `--rules`, `-r`: Path to rules file (default: rules.yaml)
-- `--type`, `-t`: Type of modqueue items to process (`all`, `submissions`, or `comments`)
-- `--debug`: Enable debug logging for troubleshooting
-- `--notification`: How to deliver removal reasons (`public` or `modmail`)
+### What happens in each run
 
-### Examples
+1. Load config and rules
+2. Authenticate with Reddit
+3. Fetch unreported modqueue items (up to `modqueue_limit`)
+4. For each item:
+   - Evaluate against rules with OpenRouter
+   - Approve if confidence > `approve_threshold`
+   - Report if confidence > `report_threshold`
+   - Skip if low confidence
+5. In dry-run: log actions without executing
+6. In normal mode: execute approve/report actions
 
-Process all modqueue items in your subreddit:
-```bash
-python main.py --mode=cli --subreddit=MySubreddit
-```
+### User-report filtering
 
-Process only comments, sending removal reasons via modmail:
-```bash
-python main.py --mode=cli --subreddit=MySubreddit --type=comments --notification=modmail
-```
+- Items already reported by users are skipped entirely
+- Only unreported items are sent to LLM for evaluation
+- This avoids redundant processing and trust modqueue user feedback
 
-Simulate moderation of submissions only with debug output:
-```bash
-python main.py --mode=cli --subreddit=MySubreddit --type=submissions --dry-run --debug
-```
+### Report reason handling
 
-## Using the MCP Server Mode
-
-The MCP server mode provides a REST API for programmatic access to the moderation functionality.
-
-### Starting the Server
-
-```bash
-python main.py --mode=mcp
-```
-
-The server will start on port 8000 by default. You can access the API documentation at `http://localhost:8000/docs`.
-
-### API Endpoints
-
-- `POST /initialize`: Initialize the server with config and rules
-- `GET /modqueue`: Get items from the modqueue
-- `POST /moderate`: Moderate a specific item
-- `GET /rules`: Get the configured rules
-
-### Example API Usage
-
-Initialize the server:
-```bash
-curl -X POST "http://localhost:8000/initialize" \
-     -H "Content-Type: application/json" \
-     -d '{"config_path": "config.yaml", "rules_path": "rules.yaml"}'
-```
-
-Get modqueue items:
-```bash
-curl -X GET "http://localhost:8000/modqueue?subreddit=MySubreddit&limit=10&item_type=all"
-```
-
-Moderate a specific item:
-```bash
-curl -X POST "http://localhost:8000/moderate" \
-     -H "Content-Type: application/json" \
-     -d '{"subreddit": "MySubreddit", "item_id": "abc123", "dry_run": true, "notification_method": "public"}'
-```
-
-## Using the Example Client
-
-For an example of how to use the MCP API programmatically, see the Python client in `examples/mcp_client.py`:
-
-```bash
-python examples/mcp_client.py --subreddit=MySubreddit --dry-run
-```
+- Report reason is prefixed with `report_marker` (e.g., "LLM-AUTO:")
+- Reason is auto-truncated if final string exceeds 99 characters
+- Reddit enforces a 100-character limit; truncation ensures compliance
 
 ## Troubleshooting
 
-If you encounter issues:
+### Debug logging
 
-1. Run with the `--debug` flag to get detailed logging:
-   ```bash
-   python main.py --mode=cli --subreddit=SUBREDDIT_NAME --debug
-   ```
+```bash
+python main.py --debug
+```
 
-2. Check your API credentials in config.yaml
+### Validation checklist
 
-3. Verify that your rules.yaml is properly formatted
+- [ ] YAML format valid in `config.yaml` and `rules.yaml`
+- [ ] Reddit credentials correct (test via `reddit.user.me()`)
+- [ ] OpenRouter API key valid and has quota
+- [ ] Subreddit name correct in config
+- [ ] Rules file has at least one rule
+- [ ] Start with `--dry-run` before production
 
-4. For MCP server issues, check the server logs and ensure the initialization endpoint was called successfully
+### Common issues
+
+- **Authentication fails**: Check Reddit credentials and user agent
+- **API errors**: Verify OpenRouter API key has remaining quota
+- **YAML parsing error**: Validate file syntax (use `yamllint` or online validator)
+- **Empty modqueue**: Normal if subreddit has low traffic; try `--dry-run` to confirm connection

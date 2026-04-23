@@ -1,3 +1,0 @@
-praw>=7.7.0
-PyYAML>=6.0
-google-generativeai>=0.3.0
