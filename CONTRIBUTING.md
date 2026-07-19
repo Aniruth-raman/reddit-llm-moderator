@@ -7,22 +7,21 @@ Thanks for contributing! This guide covers development setup and the current min
 1. Fork and clone the repository
 2. Create a feature branch
 3. Install dependencies:
-   ```bash
+```bash
    uv sync
-   ```
+```
 4. Test your changes:
-   ```bash
-   python main.py --dry-run --debug
-   ```
+```bash
+   uv run main.py --dry-run --debug
+```
 
 ## Project Structure
 
 ```text
 reddit-llm-moderator/
 ├── main.py                 # CLI entrypoint, logging setup
-├── models.py               # Frozen dataclasses (Rule, ModerationItem, Decision)
-├── openrouter.py           # OpenRouter API integration
-├── moderation.py           # Workflow, Reddit ops, config loading
+├── openrouter.py           # OpenRouter API integration, prompt building, response parsing
+├── moderation.py           # Workflow, Reddit ops, config/rules loading
 ├── config.yaml.template    # Config template
 ├── rules.yaml.template     # Rules template
 ├── pyproject.toml          # Dependencies (praw, pyyaml)
@@ -39,24 +38,18 @@ reddit-llm-moderator/
 - Logging configuration
 - Calls `moderation.process_modqueue()`
 
-### models.py
-- `Rule`: frozen dataclass with number, title, explanation
-- `ModerationItem`: item_id, item_type, title, body, author, permalink
-- `ModerationDecision`: violates, confidence, rule_number, explanation
-
 ### openrouter.py
-- `evaluate(item, rules)`: Main entry point
-- `create_prompt(item, rules)`: Builds LLM prompt
-- `generate_content(prompt)`: HTTP POST to OpenRouter
+- `evaluate(provider_config, item, rules)`: Main entry point, returns a decision dict
+- `create_prompt(item, rules)`: Builds LLM prompt (handles both submissions and comments)
+- `generate_content(provider_config, prompt)`: HTTP POST to OpenRouter; raises `ProviderError` on 429 or unreachable endpoint, so the caller can stop the run instead of retrying every item
 - `parse_response(response)`: JSON parsing + error handling
 - `normalize_confidence(raw_value)`: Clamps confidence to 0-100
 
 ### moderation.py
-- `load_config()`: YAML validation (required: reddit, moderation, llm_provider)
-- `load_rules()`: YAML parsing to Rule objects
-- `fetch_modqueue_items()`: Filters unreported items, stops at limit
-- `has_user_report(item)`: Checks item.user_reports list
-- `process_modqueue()`: Main workflow loop
+- `load_config()`: Loads `config.yaml` (no schema validation — misconfiguration surfaces as an exception at first use)
+- `load_rules()`: Loads the `rules` list from `rules.yaml`
+- `fetch_modqueue_items()`: Fetches posts and comments, skipping items with any user report or with a prior bot report (matched by `report_marker`), stops at `limit`
+- `process_modqueue()`: Main workflow loop; stops early on `ProviderError`
 - `process_item(item)`: LLM evaluation + approve/report decision
 - `build_report_reason()`: Formats reason with truncation (99 chars max)
 
@@ -64,10 +57,10 @@ reddit-llm-moderator/
 
 ### Adding a feature
 
-1. Identify which module owns the change (models, openrouter, moderation, main)
+1. Identify which module owns the change (openrouter, moderation, main)
 2. Keep changes minimal and focused
 3. Test with `--dry-run --debug`
-4. Update relevant docs (README, RUNNING, CONTRIBUTING)
+4. Update relevant docs (README, CONTRIBUTING)
 
 ### Modifying LLM integration
 
@@ -85,15 +78,15 @@ reddit-llm-moderator/
 ### Modifying config schema
 
 - Update `load_config()` validation in `moderation.py`
-- Update `config.yaml.template` and `config.yaml.bkp`
-- Update docs (README, RUNNING)
+- Update `config.yaml.template`
+- Update docs (README)
 
 ## Testing
 
 ### Dry-run test
 
 ```bash
-python main.py --dry-run --debug
+uv run main.py --dry-run --debug
 ```
 
 Evaluates modqueue, logs decisions, no Reddit actions.
@@ -106,7 +99,7 @@ Edit `moderation.py` temporarily to hardcode a test item, then run.
 
 - **Keep it minimal**: Single responsibility per PR
 - **Test locally**: Use `--dry-run` first
-- **Update docs**: README, RUNNING, CONTRIBUTING if behavior changes
+- **Update docs**: README, CONTRIBUTING if behavior changes
 - **Clear message**: Explain what changed and why
 - **No dependencies**: Don't add new packages without discussion
 
@@ -122,6 +115,6 @@ Edit `moderation.py` temporarily to hardcode a test item, then run.
 
 - **OpenRouter only**: No provider factory, hardcoded (minimalism)
 - **Approve + Report only**: No remove action
-- **User-report filtering**: Skip items already flagged by users
+- **Report filtering**: Skip items already flagged by users, or already reported by this bot
 - **Config flat**: No nested providers map, no mode field
 - **~500 LOC total**: Keep total codebase small

@@ -4,13 +4,14 @@ Minimal CLI moderator for Reddit modqueue using OpenRouter.
 
 ## What it does
 
-- Fetches unreported modqueue items from one subreddit
-- Filters out user-reported items (skips evaluating already flagged submissions)
+- Fetches unreported modqueue items (posts and comments) from one subreddit
+- Skips items already reported by users, and items it has already reported itself
 - Uses OpenRouter to evaluate each item against subreddit rules
 - Takes two actions based on LLM confidence:
   - **approve**: high-confidence non-violations (above `approve_threshold`)
   - **report**: high-confidence violations (above `report_threshold`)
 - Skips low-confidence items for manual review
+- Stops the run early (instead of retrying item by item) if OpenRouter rate-limits or is unreachable — the next scheduled run picks up where it left off
 - Supports dry-run mode for safe testing
 
 ## Requirements
@@ -41,7 +42,7 @@ reddit:
   subreddit: "YourSubreddit"
 
 moderation:
-  modqueue_limit: 20              # Max items to process per run
+  modqueue_limit: 16              # Max items to process per run
   approve_threshold: 80           # % confidence to approve
   report_threshold: 70            # % confidence to report
   report_marker: "LLM-AUTO:"     # Prefix for report reason
@@ -58,35 +59,29 @@ llm_provider:
 
 ```bash
 # Process modqueue with live actions
-python main.py
+uv run main.py
 
 # Dry-run: evaluate but don't approve/report
-python main.py --dry-run
+uv run main.py --dry-run
 
 # Debug: verbose logging
-python main.py --debug
+uv run main.py --debug
 
 # Combine options
-python main.py --dry-run --debug
+uv run main.py --dry-run --debug
 ```
 
 ## Architecture
 
-- **main.py**: CLI entrypoint, logging setup
-- **models.py**: Domain types (Rule, ModerationItem, ModerationDecision)
-- **openrouter.py**: OpenRouter API integration and evaluation logic
-- **moderation.py**: Moderation workflow, Reddit operations, config loading
+- **main.py**: CLI entrypoint, argument parsing, logging setup
+- **openrouter.py**: OpenRouter API integration, prompt building, response parsing
+- **moderation.py**: Moderation workflow, Reddit operations, config/rules loading
 
 ## Key Behaviors
 
-- **User-report filtering**: Only unreported items are fetched and evaluated; user-reported submissions are skipped
+- **Report filtering**: Items already reported by a user, or already reported by this bot (including reports a mod later dismissed), are skipped and never re-evaluated
 - **Approval flow**: Non-violations with high confidence are auto-approved
 - **Report flow**: Violations with high confidence are auto-reported with reason (character-limited to 99 chars)
+- **Rate-limit handling**: A 429 or unreachable OpenRouter stops the rest of the run immediately rather than retrying every remaining item; the hourly schedule provides the backoff
 - **Dry-run safety**: No actions taken, only logged
-- **OpenRouter-only**: Single provider, hardcoded (no provider switching)
-
-## Notes
-
-- No moderation modes (no "enforce" vs "report_only"); always approve + report
-- No remove action; only approve and report
-- Report reasons are auto-truncated if they exceed Reddit's 100-char limit
+- **OpenRouter-only**: Single provider, hardcoded

@@ -4,65 +4,30 @@ from typing import Any
 import praw
 import yaml
 
-import openrouter
-from models import ModerationDecision, ModerationItem, Rule
+from openrouter import ProviderError, evaluate
 
 logger = logging.getLogger(__name__)
 MAX_REDDIT_REPORT_REASON_LENGTH = 99
 
 
 def load_config(config_path: str) -> dict:
-    with open(config_path, "r", encoding="utf-8") as file_obj:
+    with open(config_path, encoding="utf-8") as file_obj:
         config = yaml.safe_load(file_obj) or {}
 
-    if not isinstance(config, dict):
-        raise ValueError("Config must be a YAML object")
-
-    reddit = config.get("reddit")
-    moderation = config.get("moderation")
-    llm_provider = config.get("llm_provider")
-
-    if not isinstance(reddit, dict):
-        raise ValueError("Missing required section: reddit")
-    if not isinstance(moderation, dict):
-        raise ValueError("Missing required section: moderation")
-    if not isinstance(llm_provider, dict):
-        raise ValueError("Missing required section: llm_provider")
-
-    for key in ["client_id", "client_secret", "username", "password", "user_agent", "subreddit"]:
-        if not reddit.get(key):
-            raise ValueError(f"Missing reddit config key: {key}")
-
-    for key in ["modqueue_limit", "approve_threshold", "report_threshold"]:
-        if key not in moderation:
-            raise ValueError(f"Missing moderation config key: {key}")
-
-    if not llm_provider.get("api_key"):
-        raise ValueError("Missing llm_provider.api_key")
+    reddit = config.get("reddit", {})
+    missing = [k for k in ("client_id", "client_secret", "username", "password", "subreddit") if not reddit.get(k)]
+    if missing:
+        raise ValueError(f"config.yaml: reddit section missing: {', '.join(missing)}")
 
     return config
 
 
-def load_rules(rules_path: str) -> list[Rule]:
-    with open(rules_path, "r", encoding="utf-8") as file_obj:
+def load_rules(rules_path: str) -> list[dict]:
+    with open(rules_path, encoding="utf-8") as file_obj:
         payload = yaml.safe_load(file_obj) or {}
-
-    rules_data = payload.get("rules")
-    if not isinstance(rules_data, list):
-        raise ValueError("'rules' must be a list in rules.yaml")
-
-    rules: list[Rule] = []
-    for index, rule in enumerate(rules_data, 1):
-        if not isinstance(rule, dict):
-            raise ValueError(f"Rule at index {index} must be an object")
-        rules.append(
-            Rule(
-                number=int(rule.get("number", index)),
-                title=str(rule.get("title", "Untitled rule")),
-                explanation=str(rule.get("explanation", "")),
-            )
-        )
-
+    rules = payload.get("rules")
+    if not rules:
+        raise ValueError("rules.yaml has no 'rules' list — refusing to run with zero rules")
     return rules
 
 
@@ -77,10 +42,13 @@ def create_reddit_client(config: dict):
     )
 
 
-def fetch_modqueue_items(reddit_client, subreddit_name: str, limit: int):
+def fetch_modqueue_items(reddit_client, subreddit_name: str, limit: int, report_marker: str):
     items: list[Any] = []
     for item in reddit_client.subreddit(subreddit_name).mod.modqueue(limit=None):
-        if has_user_report(item):
+        if item.user_reports:
+            continue
+        reports = (getattr(item, "mod_reports", None) or []) + (getattr(item, "mod_reports_dismissed", None) or [])
+        if any(reason.startswith(report_marker) for reason, _ in reports):
             continue
         items.append(item)
         if len(items) >= limit:
@@ -88,38 +56,10 @@ def fetch_modqueue_items(reddit_client, subreddit_name: str, limit: int):
     return items
 
 
-def approve_item(item) -> None:
-    item.mod.approve()
-
-
-def report_item(item, reason: str) -> None:
-    item.report(reason=reason)
-
-
-def has_bot_report(item, marker: str) -> bool:
-    mod_reports = getattr(item, "mod_reports", None) or []
-    for report in mod_reports:
-        reason = report[0] if isinstance(report, (tuple, list)) and report else report
-        if isinstance(reason, str) and marker in reason:
-            return True
-    return False
-
-
-def has_user_report(item) -> bool:
-    user_reports = getattr(item, "user_reports", None) or []
-    for report in user_reports:
-        if isinstance(report, (tuple, list)) and len(report) >= 2:
-            try:
-                if int(report[1]) > 0:
-                    return True
-            except (TypeError, ValueError):
-                continue
-    return False
-
-
-def build_report_reason(decision: ModerationDecision, report_marker: str) -> str:
-    rule_part = f"Rule {decision.rule_number}" if decision.rule_number is not None else "Rule"
-    explanation = decision.explanation or "Potential rule violation"
+def build_report_reason(decision: dict, report_marker: str) -> str:
+    rule_number = decision.get("rule_number")
+    rule_part = f"Rule {rule_number}" if rule_number is not None else "Rule"
+    explanation = decision.get("explanation") or "Potential rule violation"
     full_reason = f"{report_marker} {rule_part}: {explanation}".strip()
     if len(full_reason) <= MAX_REDDIT_REPORT_REASON_LENGTH:
         return full_reason
@@ -129,49 +69,27 @@ def build_report_reason(decision: ModerationDecision, report_marker: str) -> str
     return f"{full_reason[:limit].rstrip()}{suffix}"
 
 
-def to_moderation_item(item: Any) -> ModerationItem:
-    author = item.author.name if hasattr(item, "author") and item.author else "[Deleted]"
-    if hasattr(item, "title"):
-        return ModerationItem(
-            item_id=getattr(item, "id", "unknown"),
-            item_type="submission",
-            title=getattr(item, "title", "[No title]"),
-            body=getattr(item, "selftext", "") or "",
-            author=author,
-            permalink=f"https://reddit.com{item.permalink}" if hasattr(item, "permalink") else "",
-        )
-    return ModerationItem(
-        item_id=getattr(item, "id", "unknown"),
-        item_type="comment",
-        title="",
-        body=getattr(item, "body", "[No body]"),
-        author=author,
-        permalink=f"https://reddit.com{item.permalink}" if hasattr(item, "permalink") else "",
-    )
-
-
-def display_text(item: ModerationItem) -> str:
-    if item.item_type == "submission":
-        title = item.title[:60] + "..." if len(item.title) > 60 else item.title
-        return f'"{title}" by u/{item.author}'
-    body = (item.body[:80] + "..." if len(item.body) > 80 else item.body).replace("\n", " ").replace("\r", " ")
-    return f'Comment: "{body}" by u/{item.author}'
+def display_text(item: Any) -> str:
+    is_submission = hasattr(item, "title")
+    author = item.author.name if item.author else "[Deleted]"
+    if is_submission:
+        title = item.title if len(item.title) <= 63 else item.title[:60] + "..."
+        return f'"{title}" by u/{author}'
+    body = item.body if len(item.body) <= 83 else item.body[:80] + "..."
+    return f'Comment: "{body}" by u/{author}'
 
 
 def process_modqueue(
     reddit_client,
     provider_config: dict,
     subreddit_name: str,
-    rules: list[Rule],
+    rules: list[dict],
     limit: int,
-    approve_threshold: int,
-    report_threshold: int,
-    dry_run: bool,
-    report_marker: str,
+    settings: dict,
 ) -> None:
-    items = fetch_modqueue_items(reddit_client, subreddit_name, limit)
+    items = fetch_modqueue_items(reddit_client, subreddit_name, limit, settings["report_marker"])
     logger.info("Fetched %s unreported items from r/%s", len(items), subreddit_name)
-    logger.info("Settings: approve>=%s%%, report>=%s%%", approve_threshold, report_threshold)
+    logger.info("Settings: approve>=%s%%, report>=%s%%", settings["approve_threshold"], settings["report_threshold"])
 
     if not items:
         logger.info("No items in modqueue")
@@ -180,15 +98,10 @@ def process_modqueue(
     for index, raw_item in enumerate(items, 1):
         logger.info("[%s/%s] Processing item", index, len(items))
         try:
-            process_item(
-                raw_item,
-                provider_config,
-                rules,
-                approve_threshold,
-                report_threshold,
-                dry_run,
-                report_marker,
-            )
+            process_item(raw_item, provider_config, rules, settings)
+        except ProviderError:
+            logger.error("Stopping run: LLM provider unavailable")
+            break
         except Exception:
             logger.exception("Failed to process item id=%s", getattr(raw_item, "id", "unknown"))
 
@@ -196,45 +109,37 @@ def process_modqueue(
 def process_item(
     raw_item: Any,
     provider_config: dict,
-    rules: list[Rule],
-    approve_threshold: int,
-    report_threshold: int,
-    dry_run: bool,
-    report_marker: str,
+    rules: list[dict],
+    settings: dict,
 ) -> None:
-    item = to_moderation_item(raw_item)
+    decision = evaluate(provider_config, raw_item, rules)
+    confidence = decision["confidence"]
+    permalink = f"https://reddit.com{raw_item.permalink}"
 
-    if item.item_type == "submission" and has_bot_report(raw_item, report_marker):
-        logger.info("Skipped (already reported by bot): %s", display_text(item))
-        if item.permalink:
-            logger.debug("Link: %s", item.permalink)
+    if not decision["violates"] and confidence >= settings["approve_threshold"]:
+        if settings["dry_run"]:
+            logger.info("[DRY RUN] Would approve (confidence: %s%%)", confidence)
+        else:
+            raw_item.mod.approve()
+            logger.info("APPROVE (confidence: %s%%)", confidence)
+        logger.info("Content: %s", display_text(raw_item))
+        if permalink:
+            logger.info("Link: %s", permalink)
         return
 
-    decision = openrouter.evaluate(provider_config, item, rules)
-    if not decision.violates and decision.confidence >= approve_threshold:
-        if dry_run:
-            logger.info("[DRY RUN] Would approve (confidence: %s%%)", decision.confidence)
+    if decision["violates"] and confidence >= settings["report_threshold"]:
+        reason = build_report_reason(decision, settings["report_marker"])
+        if settings["dry_run"]:
+            logger.info("[DRY RUN] Would report (confidence: %s%%)", confidence)
         else:
-            approve_item(raw_item)
-            logger.info("APPROVE (confidence: %s%%)", decision.confidence)
-        logger.info("Content: %s", display_text(item))
-        if item.permalink:
-            logger.info("Link: %s", item.permalink)
-        return
-
-    if decision.violates and decision.confidence >= report_threshold:
-        reason = build_report_reason(decision, report_marker)
-        if dry_run:
-            logger.info("[DRY RUN] Would report (confidence: %s%%)", decision.confidence)
-        else:
-            report_item(raw_item, reason)
-            logger.info("REPORT (confidence: %s%%)", decision.confidence)
-        logger.info("Content: %s", display_text(item))
+            raw_item.report(reason=reason)
+            logger.info("REPORT (confidence: %s%%)", confidence)
+        logger.info("Content: %s", display_text(raw_item))
         logger.info("Reason: %s", reason)
-        if item.permalink:
-            logger.info("Link: %s", item.permalink)
+        if permalink:
+            logger.info("Link: %s", permalink)
         return
 
-    logger.info("Skipped (confidence: %s%%): %s", decision.confidence, display_text(item))
-    if item.permalink:
-        logger.debug("Link: %s", item.permalink)
+    logger.info("Skipped (confidence: %s%%): %s", confidence, display_text(raw_item))
+    if permalink:
+        logger.debug("Link: %s", permalink)

@@ -29,7 +29,7 @@ reddit:
   subreddit: "YourSubreddit"
 
 moderation:
-  modqueue_limit: 20
+  modqueue_limit: 16
   approve_threshold: 80
   report_threshold: 70
   report_marker: "LLM-AUTO:"
@@ -73,7 +73,7 @@ rules:
 ## Running the Workflow
 
 1. Go to **Actions** tab
-2. Select **Reddit Moderation Pipeline** workflow
+2. Select the **Moderate** workflow
 3. Click **Run workflow**
 4. Set options:
    - `dry_run`: `true` = evaluate only, no actions
@@ -104,14 +104,14 @@ Evaluates modqueue and takes moderation actions (approve/report) based on confid
 
 1. Load config and rules from secrets
 2. Authenticate with Reddit
-3. Fetch unreported modqueue items
+3. Fetch unreported, not-yet-bot-reported modqueue items (posts and comments)
 4. Evaluate each with OpenRouter
-5. Approve/report based on thresholds
+5. Approve/report based on thresholds; stop early if OpenRouter rate-limits or is unreachable
 6. Log results
 
-### User-report filtering
+### Report filtering
 
-Items already reported by users are skipped (not evaluated). Only unreported items go to LLM.
+Items already reported by a user are skipped (never auto-actioned). Items this bot has already reported are also skipped, so they aren't re-evaluated or re-reported on later runs. Only items with neither kind of report go to the LLM.
 
 ## Security
 
@@ -129,10 +129,10 @@ cp rules.yaml.template rules.yaml
 # Edit with your values...
 
 # Test in dry-run
-python main.py --dry-run --debug
+uv run main.py --dry-run --debug
 
 # Test normal execution
-python main.py --debug
+uv run main.py --debug
 ```
 
 ## Troubleshooting

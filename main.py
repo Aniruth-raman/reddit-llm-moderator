@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 import argparse
 import logging
 import sys
@@ -10,22 +10,16 @@ logger = logging.getLogger(__name__)
 
 def configure_logging(debug: bool, log_file: str | None) -> None:
     level = logging.DEBUG if debug else logging.INFO
-    root = logging.getLogger()
-    root.handlers.clear()
-    root.setLevel(level)
-
-    console = logging.StreamHandler(sys.stdout)
-    console.setLevel(level)
-    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"))
-    root.addHandler(console)
-
+    handlers = [logging.StreamHandler(sys.stdout)]
     if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(level)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-        )
-        root.addHandler(file_handler)
+        handlers.append(logging.FileHandler(log_file))
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=handlers,
+        force=True,
+    )
 
 
 def main() -> int:
@@ -44,16 +38,19 @@ def main() -> int:
         rules = load_rules(args.rules)
         reddit_client = create_reddit_client(config)
         moderation = config["moderation"]
+        settings = {
+            "approve_threshold": int(moderation["approve_threshold"]),
+            "report_threshold": int(moderation["report_threshold"]),
+            "dry_run": args.dry_run,
+            "report_marker": str(moderation.get("report_marker", "LLM-AUTO:")),
+        }
         process_modqueue(
             reddit_client=reddit_client,
             provider_config=config["llm_provider"],
             subreddit_name=config["reddit"]["subreddit"],
             rules=rules,
             limit=int(moderation["modqueue_limit"]),
-            approve_threshold=int(moderation["approve_threshold"]),
-            report_threshold=int(moderation["report_threshold"]),
-            dry_run=args.dry_run,
-            report_marker=str(moderation.get("report_marker", "LLM-AUTO:")),
+            settings=settings,
         )
     except Exception:
         logger.exception("Moderation run failed")
